@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>旅のしおり</title>
+<meta name="theme-color" content="#1f6f8b">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kaisei+Decol:wght@400;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Klee+One:wght@400;600&family=Shippori+Mincho:wght@500;700&family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="booklet.css">
+<style>
+  :root {
+    --bg: #f3f6f7; --card: #ffffff; --ink: #1d2a30; --muted: #64757c;
+    --line: #dde6e9; --accent: #1f6f8b; --accent-ink: #ffffff; --soft: #e3f0f4; --danger: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12191c; --card: #1b2428; --ink: #e4ecee; --muted: #93a6ad;
+      --line: #2c393e; --accent: #5bb6d4; --accent-ink: #0b1f27; --soft: #1d323a; --danger: #f2766b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); line-height: 1.5;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  main { max-width: 720px; margin: 0 auto;
+    padding: calc(20px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+             calc(64px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); }
+  [hidden] { display: none !important; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  h1 { font-size: 1.4rem; margin: 0; flex: 0 0 auto; }
+  header select { flex: 1; min-width: 0; }
+  h2 { font-size: 1rem; margin: 0 0 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 140px; }
+  input, select, textarea, button { font: inherit; color: inherit; }
+  input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 16px; }
+  textarea { min-height: 60px; resize: vertical; }
+  button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); cursor: pointer; min-height: 40px; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.danger { color: var(--danger); }
+  button.text { border: none; background: none; color: var(--accent); padding: 4px 8px; min-height: 0; }
+  label.small { display: block; font-size: .8rem; color: var(--muted); margin: 10px 0 4px; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .error { color: var(--danger); font-size: .9rem; min-height: 1.2em; margin: 6px 0 0; }
+
+  .hero { background: var(--accent); color: var(--accent-ink); border: none; }
+  .hero .title { font-size: 1.3rem; font-weight: 700; }
+  .hero .sub { opacity: .85; font-size: .9rem; }
+  .hero .phase { margin-top: 8px; font-size: 1.05rem; font-weight: 600; }
+  .hero .tools { margin-top: 6px; }
+  .hero .tools button { color: var(--accent-ink); opacity: .85; padding: 4px 0; margin-right: 14px; }
+
+  .next { border: 2px solid var(--accent); }
+  .next .label { font-size: .8rem; color: var(--accent); font-weight: 700; letter-spacing: .05em; }
+  .next .what { font-size: 1.25rem; font-weight: 700; margin: 2px 0; }
+
+  .day h2 { display: flex; justify-content: space-between; align-items: baseline; }
+  .day.today { border-color: var(--accent); }
+  ul.items { list-style: none; padding: 0; margin: 0; }
+  ul.items li { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer; }
+  ul.items li:first-child { border-top: none; }
+  ul.items li.past { opacity: .55; }
+  ul.items li.is-next { background: var(--soft); border-radius: 8px; padding-left: 6px; }
+  .time { width: 3.2em; flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--muted); font-size: .9rem; padding-top: 1px; }
+  .kind { flex: 0 0 auto; }
+  .body { flex: 1; min-width: 0; }
+  .body .memo { white-space: pre-wrap; color: var(--muted); font-size: .88rem; }
+  a.map { color: var(--accent); font-size: .88rem; text-decoration: none; }
+
+  ul.packs { list-style: none; padding: 0; margin: 0; }
+  ul.packs li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+  ul.packs li:first-child { border-top: none; }
+  ul.packs li.done span { text-decoration: line-through; color: var(--muted); }
+  ul.packs input[type="checkbox"] { width: 20px; height: 20px; flex: 0 0 auto; }
+  ul.packs span { flex: 1; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>旅のしおり</h1>
+    <select id="tripSelect" aria-label="旅行" hidden></select>
+  </header>
+
+  <!-- 旅行の作成・編集 -->
+  <section class="card" id="tripFormCard" hidden>
+    <h2 id="tripFormTitle">新しい旅行</h2>
+    <form id="tripForm">
+      <label class="small" for="tName">旅行の名前</label>
+      <input id="tName" placeholder="例：冬の金沢旅行" maxlength="40" autocomplete="off">
+      <label class="small" for="tDest">行き先</label>
+      <input id="tDest" placeholder="例：石川県 金沢市" maxlength="60" autocomplete="off">
+      <div class="row">
+        <div><label class="small" for="tStart">出発日</label><input id="tStart" type="date"></div>
+        <div><label class="small" for="tEnd">帰る日</label><input id="tEnd" type="date"></div>
+      </div>
+      <p class="error" id="tripError"></p>
+      <div class="actions">
+        <button class="primary" type="submit" id="tripSave">作る</button>
+        <button type="button" id="tripCancel">やめる</button>
+      </div>
+    </form>
+  </section>
+
+  <div id="tripView" hidden>
+    <section class="card hero">
+      <div class="title" id="hTitle"></div>
+      <div class="sub" id="hSub"></div>
+      <div class="phase" id="hPhase"></div>
+      <div class="tools">
+        <button class="text" id="openBooklet" type="button">しおり（冊子）を見る</button>
+        <button class="text" id="shareTrip" type="button">共有</button>
+        <button class="text" id="editTrip" type="button">旅行を編集</button>
+        <button class="text" id="newTrip" type="button">新しい旅行</button>
+        <button class="text" id="deleteTrip" type="button">削除</button>
+      </div>
+    </section>
+
+    <section class="card next" id="nextCard" hidden>
+      <div class="label">次の予定</div>
+      <div class="what" id="nextWhat"></div>
+      <div class="muted" id="nextWhen"></div>
+      <div id="nextPlace"></div>
+    </section>
+
+    <!-- 予定の追加・編集 -->
+    <section class="card" id="itemFormCard" hidden>
+      <h2 id="itemFormTitle">予定を追加</h2>
+      <form id="itemForm">
+        <div class="row">
+          <div><label class="small" for="iDate">日</label><select id="iDate"></select></div>
+          <div><label class="small" for="iTime">時刻（空欄なら終日）</label><input id="iTime" type="time"></div>
+          <div><label class="small" for="iKind">種類</label>
+            <select id="iKind">
+              <option value="sight">📍 観光</option>
+              <option value="food">🍽 食事</option>
+              <option value="move">🚃 移動</option>
+              <option value="stay">🏨 宿</option>
+              <option value="other">📝 その他</option>
+            </select></div>
+        </div>
+        <label class="small" for="iTitle">内容</label>
+        <input id="iTitle" placeholder="例：兼六園を散歩" maxlength="60" autocomplete="off">
+        <label class="small" for="iPlace">場所（地図で開けます）</label>
+        <input id="iPlace" placeholder="例：兼六園" maxlength="80" autocomplete="off">
+        <label class="small" for="iMemo">メモ（予約番号・持ち物など）</label>
+        <textarea id="iMemo" maxlength="500"></textarea>
+        <p class="error" id="itemError"></p>
+        <div class="actions">
+          <button class="primary" type="submit" id="itemSave">追加</button>
+          <button type="button" id="itemCancel">やめる</button>
+          <button type="button" class="danger" id="itemDelete" hidden>削除</button>
+        </div>
+      </form>
+    </section>
+
+    <div id="days"></div>
+
+    <section class="card">
+      <h2>持ち物 <span class="muted" id="packCount"></span></h2>
+      <form id="packForm" class="row">
+        <input id="packName" placeholder="例：充電器" maxlength="40" autocomplete="off">
+        <button class="primary" type="submit" style="flex:0 0 auto">追加</button>
+      </form>
+      <ul class="packs" id="packs"></ul>
+      <div class="actions">
+        <button type="button" id="tplDomestic">国内旅行のひな形を追加</button>
+        <button type="button" id="tplAbroad">海外旅行のひな形を追加</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div id="booklet" class="bk" hidden>
+  <div class="bk-bar">
+    <button type="button" class="go" id="bkShare">共有</button>
+    <button type="button" class="go" id="bkImport" hidden>自分のしおりに追加</button>
+    <button type="button" id="bkPrint">PDFで保存</button>
+    <button type="button" id="bkClose">閉じる</button>
+  </div>
+  <p class="bk-hint" id="bkSharedNote" hidden>共有されたしおりです。「自分のしおりに追加」を押すと、このアプリで予定を見たり直したりできます。</p>
+  <div class="bk-themes" id="bkThemes" role="group" aria-label="冊子のデザイン"></div>
+  <p class="bk-hint">「PDFで保存」を押し、送信先で「PDFに保存」を選んでください（iPhone は共有メニューの「プリント」から保存できます）</p>
+  <div id="bkPages"></div>
+</div>
+
+<script src="logic.js"></script>
+<script src="booklet.js"></script>
+<script src="share.js"></script>
+<script>
+  const KEY = "tabi-shiori-v1";
+  const KINDS = { sight: "📍", food: "🍽", move: "🚃", stay: "🏨", other: "📝" };
+  const TEMPLATES = {
+    domestic: ["財布", "スマホ", "充電器", "モバイルバッテリー", "着替え", "下着・靴下", "歯ブラシ", "常備薬", "保険証", "ハンカチ・ティッシュ", "折りたたみ傘"],
+    abroad: ["パスポート", "航空券（eチケット）", "クレジットカード", "現地通貨", "変換プラグ", "海外旅行保険の証書", "SIM・Wi-Fiルーター", "財布", "スマホ", "充電器", "着替え", "常備薬"],
+  };
+  const WD = ["日", "月", "火", "水", "木", "金", "土"];
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  const md = (iso) => { const [y, m, d] = iso.split("-").map(Number); return `${m}/${d}(${WD[new Date(y, m - 1, d).getDay()]})`; };
+  const mapUrl = (q) => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q);
+
+  let state = { trips: [], currentId: null };
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.trips)) state = s; } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+  const trip = () => state.trips.find((t) => t.id === state.currentId) || null;
+
+  let editingTrip = false;
+  let editingItem = null;
+
+  // ---- 描画 ----
+  function render() {
+    const t = trip();
+    const sel = $("tripSelect");
+    sel.hidden = state.trips.length < 2;
+    sel.innerHTML = state.trips.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");
+    if (t) sel.value = t.id;
+
+    $("tripFormCard").hidden = !(editingTrip || !t);
+    $("tripCancel").hidden = !t;
+    $("tripView").hidden = !t;
+    if (!t) return;
+
+    const now = new Date();
+    $("hTitle").textContent = t.name;
+    $("hSub").textContent = `${t.dest ? t.dest + " ・ " : ""}${md(t.start)} 〜 ${md(t.end)}`;
+    const p = Shiori.tripPhase(t.start, t.end, now);
+    $("hPhase").textContent = p.phase === "before" ? (p.daysLeft === 1 ? "明日出発！" : `出発まであと ${p.daysLeft} 日`)
+      : p.phase === "during" ? `旅行 ${p.day} 日目` : "おかえりなさい";
+
+    const next = p.phase === "during" ? Shiori.nextItem(t.items, now) : null;
+    $("nextCard").hidden = !next;
+    if (next) {
+      $("nextWhat").textContent = `${KINDS[next.kind] || ""} ${next.title}`;
+      $("nextWhen").textContent = `${md(next.date)} ${next.time || "終日"}`;
+      $("nextPlace").innerHTML = next.place ? `<a class="map" href="${esc(mapUrl(next.place))}" target="_blank" rel="noopener">${esc(next.place)} を地図で開く</a>` : "";
+    }
+
+    const today = Shiori.toISO(now);
+    const hm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const days = Shiori.tripDays(t.start, t.end);
+    const items = Shiori.sortItems(t.items);
+    $("days").innerHTML = days.map((d, i) => {
+      const list = items.filter((it) => it.date === d);
+      const rows = list.map((it) => {
+        const past = it.date < today || (it.date === today && it.time && it.time < hm);
+        const cls = [past ? "past" : "", next && next.id === it.id ? "is-next" : ""].join(" ").trim();
+        return `<li data-item="${esc(it.id)}" class="${cls}">
+          <div class="time">${esc(it.time || "終日")}</div>
+          <div class="kind">${KINDS[it.kind] || ""}</div>
+          <div class="body"><div>${esc(it.title)}</div>
+            ${it.place ? `<a class="map" href="${esc(mapUrl(it.place))}" target="_blank" rel="noopener">${esc(it.place)}</a>` : ""}
+            ${it.memo ? `<div class="memo">${esc(it.memo)}</div>` : ""}</div></li>`;
+      }).join("");
+      return `<section class="card day${d === today ? " today" : ""}">
+        <h2><span>${i + 1}日目 <span class="muted">${md(d)}</span></span>
+          <button class="text" type="button" data-add="${d}">＋ 予定</button></h2>
+        <ul class="items">${rows || '<li class="muted" style="cursor:default">まだ予定がありません</li>'}</ul></section>`;
+    }).join("");
+
+    $("iDate").innerHTML = days.map((d, i) => `<option value="${d}">${i + 1}日目 ${md(d)}</option>`).join("");
+
+    const packs = t.packs || [];
+    const done = packs.filter((x) => x.done).length;
+    $("packCount").textContent = packs.length ? `${done} / ${packs.length}` : "";
+    $("packs").innerHTML = packs.map((x) =>
+      `<li class="${x.done ? "done" : ""}"><input type="checkbox" data-pack="${esc(x.id)}" ${x.done ? "checked" : ""}>
+        <span>${esc(x.name)}</span><button class="text" type="button" data-del-pack="${esc(x.id)}">×</button></li>`).join("")
+      || '<li class="muted">まだありません</li>';
+  }
+
+  // ---- 旅行 ----
+  function openTripForm(edit) {
+    editingTrip = true;
+    const t = edit ? trip() : null;
+    $("tripFormTitle").textContent = t ? "旅行を編集" : "新しい旅行";
+    $("tripSave").textContent = t ? "保存" : "作る";
+    $("tName").value = t ? t.name : "";
+    $("tDest").value = t ? t.dest : "";
+    $("tStart").value = t ? t.start : "";
+    $("tEnd").value = t ? t.end : "";
+    $("tripError").textContent = "";
+    $("tripForm").dataset.mode = t ? "edit" : "new";
+    render();
+    $("tName").focus();
+  }
+
+  $("tStart").addEventListener("change", () => { if (!$("tEnd").value || $("tEnd").value < $("tStart").value) $("tEnd").value = $("tStart").value; });
+
+  $("tripForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const name = $("tName").value.trim(), dest = $("tDest").value.trim(), start = $("tStart").value, end = $("tEnd").value;
+    const err = (m) => ($("tripError").textContent = m);
+    if (!name) return err("旅行の名前を入力してください");
+    if (!start || !end) return err("出発日と帰る日を入力してください");
+    if (end < start) return err("帰る日は出発日より後にしてください");
+    if (Shiori.tripDays(start, end).length > 60) return err("期間は60日までにしてください");
+    if ($("tripForm").dataset.mode === "edit") {
+      const t = trip();
+      const days = new Set(Shiori.tripDays(start, end));
+      const outside = t.items.filter((it) => !days.has(it.date)).length;
+      if (outside && !confirm(`期間の外になる予定が ${outside} 件あります。削除して保存しますか？`)) return;
+      Object.assign(t, { name, dest, start, end, items: t.items.filter((it) => days.has(it.date)) });
+    } else {
+      const t = { id: uid(), name, dest, start, end, items: [], packs: [] };
+      state.trips.push(t);
+      state.currentId = t.id;
+    }
+    editingTrip = false;
+    save(); render();
+  });
+
+  $("tripCancel").addEventListener("click", () => { editingTrip = false; render(); });
+  $("editTrip").addEventListener("click", () => openTripForm(true));
+  $("newTrip").addEventListener("click", () => openTripForm(false));
+  $("tripSelect").addEventListener("change", (e) => { state.currentId = e.target.value; closeItemForm(); save(); render(); });
+  $("deleteTrip").addEventListener("click", () => {
+    const t = trip();
+    if (!confirm(`「${t.name}」を削除します。予定 ${t.items.length} 件・持ち物 ${(t.packs || []).length} 件も消え、元に戻せません。よろしいですか？`)) return;
+    state.trips = state.trips.filter((x) => x.id !== t.id);
+    state.currentId = state.trips[0] ? state.trips[0].id : null;
+    closeItemForm();
+    save(); render();
+  });
+
+  // ---- 予定 ----
+  function openItemForm(date, item) {
+    editingItem = item || null;
+    $("itemFormCard").hidden = false;
+    $("itemFormTitle").textContent = item ? "予定を編集" : "予定を追加";
+    $("itemSave").textContent = item ? "保存" : "追加";
+    $("itemDelete").hidden = !item;
+    $("iDate").value = item ? item.date : date;
+    $("iTime").value = item ? item.time : "";
+    $("iKind").value = item ? item.kind : "sight";
+    $("iTitle").value = item ? item.title : "";
+    $("iPlace").value = item ? item.place : "";
+    $("iMemo").value = item ? item.memo : "";
+    $("itemError").textContent = "";
+    $("itemFormCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => $("iTitle").focus(), 300);
+  }
+  function closeItemForm() { editingItem = null; $("itemFormCard").hidden = true; }
+
+  $("days").addEventListener("click", (ev) => {
+    if (ev.target.closest("a")) return; // 地図リンクはそのまま開く
+    const add = ev.target.closest("[data-add]");
+    if (add) return openItemForm(add.dataset.add, null);
+    const li = ev.target.closest("[data-item]");
+    if (li) openItemForm(null, trip().items.find((x) => x.id === li.dataset.item));
+  });
+
+  $("itemForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const title = $("iTitle").value.trim();
+    if (!title) return ($("itemError").textContent = "内容を入力してください");
+    const data = { date: $("iDate").value, time: $("iTime").value, kind: $("iKind").value, title,
+      place: $("iPlace").value.trim(), memo: $("iMemo").value.trim() };
+    if (editingItem) Object.assign(editingItem, data);
+    else trip().items.push({ id: uid(), ...data });
+    closeItemForm();
+    save(); render();
+  });
+  $("itemCancel").addEventListener("click", closeItemForm);
+  $("itemDelete").addEventListener("click", () => {
+    if (!editingItem || !confirm("この予定を削除しますか？")) return;
+    const t = trip();
+    t.items = t.items.filter((x) => x !== editingItem);
+    closeItemForm();
+    save(); render();
+  });
+
+  // ---- 持ち物 ----
+  $("packForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const name = $("packName").value.trim();
+    if (!name) return;
+    const t = trip();
+    t.packs = t.packs || [];
+    t.packs.push({ id: uid(), name, done: false });
+    $("packName").value = "";
+    save(); render();
+  });
+  $("packs").addEventListener("click", (ev) => {
+    const t = trip();
+    const cb = ev.target.closest("[data-pack]");
+    const del = ev.target.closest("[data-del-pack]");
+    if (cb) { const x = t.packs.find((p) => p.id === cb.dataset.pack); x.done = cb.checked; save(); render(); }
+    if (del) { t.packs = t.packs.filter((p) => p.id !== del.dataset.delPack); save(); render(); }
+  });
+  function addTemplate(kind) {
+    const t = trip();
+    t.packs = t.packs || [];
+    const have = new Set(t.packs.map((p) => p.name));
+    for (const name of TEMPLATES[kind]) if (!have.has(name)) t.packs.push({ id: uid(), name, done: false });
+    save(); render();
+  }
+  $("tplDomestic").addEventListener("click", () => addTemplate("domestic"));
+  $("tplAbroad").addEventListener("click", () => addTemplate("abroad"));
+
+  // ---- 冊子 ----
+  function fitSheets() {
+    for (const sheet of document.querySelectorAll("#bkPages .sheet")) {
+      const page = sheet.firstElementChild;
+      const scale = sheet.clientWidth / page.offsetWidth;
+      page.style.transform = `scale(${scale})`;
+      sheet.style.height = page.offsetHeight * scale + "px";
+    }
+  }
+  // デザインごとの見本の色（選ぶボタンの丸）と、使う書体（はみ出しを測る前に読み込む）
+  const THEME_LOOK = {
+    eki: { swatch: "linear-gradient(135deg,#e3a72f 50%,#c8463a 50%)", fonts: ['700 12pt "Kaisei Decol"', '400 12pt "Zen Kaku Gothic New"', '700 12pt "Zen Kaku Gothic New"'] },
+    diary: { swatch: "linear-gradient(135deg,#f6c344 50%,#4f9d69 50%)", fonts: ['400 12pt "Klee One"', '600 12pt "Klee One"'] },
+    washoku: { swatch: "linear-gradient(135deg,#2d2a26 50%,#b0864b 50%)", fonts: ['500 12pt "Shippori Mincho"', '700 12pt "Shippori Mincho"'] },
+    magazine: { swatch: "linear-gradient(135deg,#2f5bff 50%,#ff4f87 50%)", fonts: ['400 12pt "Dela Gothic One"', '500 12pt "M PLUS Rounded 1c"', '800 12pt "M PLUS Rounded 1c"'] },
+  };
+  let bookletToken = 0;
+
+  function renderThemeButtons(current) {
+    $("bkThemes").innerHTML = Object.entries(Booklet.themes).map(([key, label]) =>
+      `<button type="button" data-theme="${key}" aria-pressed="${key === current}"><i style="background:${THEME_LOOK[key].swatch}"></i>${label}</button>`).join("");
+  }
+
+  let bookletTrip = null; // 冊子に表示中の旅行（共有リンクで届いたものは保存されていない）
+  let sharedView = false;
+
+  async function openBooklet(t = trip()) {
+    bookletTrip = t;
+    const theme = Booklet.themes[t.bookTheme] ? t.bookTheme : "eki";
+    const token = ++bookletToken;
+    renderThemeButtons(theme);
+    $("booklet").className = `bk theme-${theme}`;
+    const tmp = document.createElement("div");
+    tmp.innerHTML = Booklet.build(t, theme);
+    $("bkPages").innerHTML = "";
+    for (const page of [...tmp.children]) {
+      const sheet = document.createElement("div");
+      sheet.className = "sheet";
+      sheet.appendChild(page);
+      $("bkPages").appendChild(sheet);
+    }
+    $("booklet").hidden = false;
+    document.body.style.overflow = "hidden";
+    document.title = `旅のしおり ${t.name}`; // PDF のファイル名になる
+    requestAnimationFrame(fitSheets);
+    // 書体が読み込まれてから、はみ出しを測ってページを分ける（圏外で読み込めなくても先へ進む）
+    if (document.fonts) {
+      await Promise.race([
+        Promise.all(THEME_LOOK[theme].fonts.map((f) => document.fonts.load(f, "旅あア1").catch(() => {}))),
+        new Promise((r) => setTimeout(r, 4000)),
+      ]);
+      await document.fonts.ready;
+    }
+    if (token !== bookletToken) return; // 途中で別のデザインに切り替えられた
+    for (const pg of document.querySelectorAll("#bkPages .page")) pg.style.transform = "";
+    Booklet.layout(document.querySelectorAll("#bkPages .page"), (page, ref) => {
+      const sheet = document.createElement("div");
+      sheet.className = "sheet";
+      sheet.appendChild(page);
+      ref.parentElement.after(sheet);
+    });
+    fitSheets();
+    $("booklet").dataset.ready = theme;
+  }
+
+  $("bkThemes").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-theme]");
+    if (!b) return;
+    bookletTrip.bookTheme = b.dataset.theme;
+    if (!sharedView) save();
+    $("booklet").dataset.ready = "";
+    openBooklet(bookletTrip);
+  });
+  function closeBooklet() {
+    $("booklet").hidden = true;
+    document.body.style.overflow = "";
+    document.title = "旅のしおり";
+    if (sharedView) {
+      sharedView = false;
+      history.replaceState(null, "", location.pathname + location.search);
+      setSharedMode(false);
+      render();
+    }
+  }
+  $("openBooklet").addEventListener("click", () => openBooklet());
+  $("bkClose").addEventListener("click", closeBooklet);
+  $("bkPrint").addEventListener("click", () => window.print());
+  window.addEventListener("resize", () => { if (!$("booklet").hidden) fitSheets(); });
+
+  // ---- 共有（リンクを LINE などで送る） ----
+  // スマホでは共有メニュー（LINE を選べる）、それ以外では LINE の送信画面を開く
+  async function shareTrip(t) {
+    let url;
+    try { url = await ShareLink.shareUrl(t); } catch (e) { return alert("共有リンクを作れませんでした：" + e.message); }
+    if (url.length > 8000 && !confirm("予定やメモが多いため、リンクがとても長くなりました。送り先によっては届かないことがあります。このまま共有しますか？")) return;
+    const text = `旅のしおり「${t.name}」（${t.start.replace(/-/g, "/")} から ${t.end.replace(/-/g, "/")}）`;
+    if (navigator.share) {
+      try { await navigator.share({ title: `旅のしおり ${t.name}`, text, url }); }
+      catch (e) { if (e.name !== "AbortError") alert("共有できませんでした：" + e.message); }
+      return;
+    }
+    window.open("https://line.me/R/share?text=" + encodeURIComponent(text + "\n" + url), "_blank", "noopener");
+  }
+  $("shareTrip").addEventListener("click", () => shareTrip(trip()));
+  $("bkShare").addEventListener("click", () => shareTrip(bookletTrip));
+
+  function setSharedMode(on) {
+    $("bkImport").hidden = !on;
+    $("bkSharedNote").hidden = !on;
+    $("bkShare").hidden = on;
+  }
+
+  // 共有リンクで届いた旅行を、自分のしおりに新しい旅行として追加する
+  $("bkImport").addEventListener("click", () => {
+    const t = bookletTrip;
+    const copy = { ...t, id: uid(), items: t.items.map((it) => ({ ...it, id: uid() })), packs: t.packs.map((p) => ({ ...p, id: uid() })) };
+    state.trips.push(copy);
+    state.currentId = copy.id;
+    save();
+    closeBooklet();
+    alert(`「${copy.name}」を自分のしおりに追加しました`);
+  });
+
+  async function openSharedFromHash() {
+    const code = ShareLink.codeFrom(location.hash);
+    if (!code) return;
+    try {
+      const t = await ShareLink.decode(code);
+      sharedView = true;
+      setSharedMode(true);
+      await openBooklet(t);
+    } catch (e) {
+      history.replaceState(null, "", location.pathname + location.search);
+      alert("共有リンクを開けませんでした。リンクが途中で切れていないか確認してください。");
+    }
+  }
+
+  // 旅行中は1分ごとに「次の予定」を更新
+  setInterval(() => { if (trip() && !editingItem && !editingTrip) render(); }, 60000);
+  if (!state.currentId && state.trips[0]) state.currentId = state.trips[0].id;
+  render();
+  openSharedFromHash();
+</script>
+</body>
+</html>

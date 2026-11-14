@@ -1,0 +1,288 @@
+/* 旅のしおり：冊子（A5）。コンセプトは「駅スタンプ帳と時刻表」 */
+.bk {
+  --paper: #f4f6f1;      /* 和紙（少し青み） */
+  --ink: #23395d;        /* 藍 */
+  --ink-soft: #5d6f8a;
+  --shu: #c8463a;        /* 朱（印） */
+  --yamabuki: #e3a72f;   /* 山吹（切符の帯） */
+  --rule: #c9d2cf;
+  --serif: "Kaisei Decol", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --sans: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", sans-serif;
+}
+
+/* ---- 画面での表示（机の上に冊子を並べた感じ） ---- */
+#booklet {
+  position: fixed; inset: 0; z-index: 50; overflow-y: auto;
+  background: #2b3442; padding: 0 0 48px;
+}
+#booklet .bk-bar {
+  position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+  padding: calc(10px + env(safe-area-inset-top)) 16px 10px; background: rgba(43, 52, 66, .92); backdrop-filter: blur(6px);
+}
+#booklet .bk-bar button { border: 1px solid #6b7a90; background: #3a4558; color: #f4f6f1; border-radius: 999px; padding: 8px 18px; min-height: 40px; font: inherit; cursor: pointer; }
+#booklet .bk-bar button.go { background: var(--yamabuki); color: #23395d; border-color: var(--yamabuki); font-weight: 700; }
+#booklet .bk-hint { color: #aab6c6; font-size: .8rem; text-align: center; margin: 0 16px 14px; }
+.sheet { width: min(92vw, 148mm); margin: 0 auto 22px; }
+.sheet > .page { transform-origin: top left; box-shadow: 0 1px 0 #d8ddd8, 0 14px 28px rgba(0, 0, 0, .35); }
+
+/* ---- ページ共通 ---- */
+.bk .page {
+  position: relative; width: 148mm; height: 210mm; overflow: hidden; background: var(--paper);
+  color: var(--ink); font-family: var(--sans); font-size: 10pt; line-height: 1.7;
+  padding: 16mm 14mm 18mm; box-sizing: border-box;
+}
+.bk a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 2px; }
+.bk .folio { position: absolute; bottom: 8mm; left: 0; right: 0; text-align: center; font-family: var(--serif); font-size: 9pt; color: var(--ink-soft); }
+.bk .page-title { font-family: var(--serif); font-weight: 700; font-size: 18pt; margin: 0 0 7mm; letter-spacing: .08em; }
+.bk .sub-title { font-family: var(--serif); font-size: 12pt; margin: 9mm 0 3mm; }
+.bk .empty { color: var(--ink-soft); font-size: 9.5pt; }
+
+/* ---- 表紙：切符の帯・縦書きの題名・駅スタンプ ---- */
+.bk .cover { padding: 0; }
+.bk .ticket-band {
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--yamabuki); color: var(--ink); padding: 7mm 12mm 6mm;
+  font-family: var(--serif); font-size: 13pt; font-weight: 700; letter-spacing: .3em;
+}
+.bk .band-no { font-family: var(--sans); font-size: 8pt; letter-spacing: .12em; font-weight: 500; }
+.bk .perf { height: 0; border-top: 2.2px dotted var(--ink); margin: 0 6mm; opacity: .55; }
+.bk .cover-title {
+  position: absolute; top: 30mm; right: 16mm; height: 120mm; margin: 0;
+  writing-mode: vertical-rl; font-family: var(--serif); font-weight: 700;
+  font-size: 30pt; line-height: 1.25; letter-spacing: .12em; color: var(--ink);
+}
+.bk .cover-stamp { position: absolute; top: 60mm; left: 13mm; width: 62mm; color: var(--shu); transform: rotate(-9deg); opacity: .9; }
+.bk .stamp { width: 100%; display: block; }
+.bk .stamp text { font-family: var(--serif); font-weight: 700; }
+.bk .cover-meta { position: absolute; left: 14mm; right: 14mm; bottom: 14mm; margin: 0; border-top: 1.2px solid var(--ink); padding-top: 4mm; display: grid; gap: 1.5mm; }
+.bk .cover-meta div { display: flex; gap: 5mm; }
+.bk .cover-meta dt { width: 17mm; color: var(--ink-soft); font-size: 8.5pt; padding-top: 1px; }
+.bk .cover-meta dd { margin: 0; font-weight: 700; }
+
+/* ---- 行程：日ごとを駅に見立てた路線 ---- */
+.bk .route { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; position: relative; }
+.bk .route::before { content: ""; position: absolute; top: 3.2mm; left: 6%; right: 6%; height: 1.6mm; background: var(--ink); border-radius: 1mm; }
+.bk .route li { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 1.5mm; }
+.bk .st-dot { width: 8mm; height: 8mm; border-radius: 50%; background: var(--paper); border: 1.6mm solid var(--ink); box-sizing: border-box; z-index: 1; }
+.bk .st-day { font-family: var(--serif); font-weight: 700; font-size: 12pt; margin-top: 2mm; }
+.bk .st-date { font-size: 8pt; color: var(--ink-soft); }
+.bk .st-picks { font-size: 8.5pt; margin-top: 2mm; line-height: 1.5; }
+.bk .st-page { font-size: 7.5pt; color: var(--shu); margin-top: 1.5mm; }
+/* 5日以上は縦の路線にする */
+.bk .route-vertical { grid-auto-flow: row; gap: 2.5mm; }
+.bk .route-vertical::before { top: 2mm; bottom: 2mm; left: 3.2mm; right: auto; width: 1.6mm; height: auto; }
+.bk .route-vertical li { flex-direction: row; align-items: baseline; text-align: left; gap: 3mm; padding: 0; }
+.bk .route-vertical .st-dot { width: 7.6mm; height: 7.6mm; flex: 0 0 auto; align-self: center; }
+.bk .route-vertical .st-day { margin: 0; width: 17mm; }
+.bk .route-vertical .st-date { width: 22mm; }
+.bk .route-vertical .st-picks { margin: 0; flex: 1; }
+.bk .stays { list-style: none; margin: 0; padding: 0; }
+.bk .stays li { display: grid; grid-template-columns: 30mm 1fr; column-gap: 3mm; padding: 2mm 0; border-top: 1px solid var(--rule); }
+.bk .stays li > :not(span) { grid-column: 2; }
+.bk .stays small { color: var(--ink-soft); white-space: pre-wrap; }
+
+/* ---- 日ごと：時刻表の路線（ここが見せ場） ---- */
+.bk .day-head { display: flex; align-items: baseline; gap: 5mm; margin-bottom: 8mm; padding-bottom: 3mm; border-bottom: 1.2px solid var(--ink); }
+.bk .day-num { font-family: var(--serif); font-weight: 700; font-size: 26pt; letter-spacing: 0; line-height: 1; }
+.bk .day-head.cont .day-num { font-size: 16pt; }
+.bk .day-date { font-size: 10pt; color: var(--ink-soft); }
+.bk .line { list-style: none; margin: 0; padding: 0; position: relative; }
+.bk .line::before { content: ""; position: absolute; left: 19.2mm; top: 2mm; bottom: 2mm; width: 1.4mm; background: var(--ink); border-radius: 1mm; }
+.bk .stop { display: grid; grid-template-columns: 14mm 11mm 1fr; column-gap: 2mm; align-items: start; padding: 0 0 5.5mm; position: relative; }
+.bk .stop-time { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; padding-top: 1.6mm; font-size: 10.5pt; }
+.bk .stop-dot {
+  width: 9.5mm; height: 9.5mm; border-radius: 50%; background: var(--paper); border: 1.3mm solid var(--ink);
+  box-sizing: border-box; display: grid; place-items: center; font-size: 10pt; line-height: 1; position: relative; z-index: 1;
+}
+.bk .kind-move .stop-dot { border-style: dashed; }
+.bk .kind-stay .stop-dot { border-color: var(--shu); }
+.bk .stop-body { padding-top: 1.2mm; min-width: 0; }
+.bk .stop-body b { display: block; font-size: 11pt; }
+.bk .stop-body a { font-size: 8.5pt; }
+.bk .stop-body p { margin: 1mm 0 0; font-size: 8.5pt; color: var(--ink-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ---- 持ち物 ---- */
+.bk .packs-list { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 8mm; }
+.bk .packs-list li { break-inside: avoid; display: flex; align-items: center; gap: 2.5mm; padding: 1.6mm 0; border-bottom: 1px dotted var(--rule); }
+.bk .box { width: 3.6mm; height: 3.6mm; border: 1.2px solid var(--ink); border-radius: .6mm; flex: 0 0 auto; position: relative; }
+.bk .box.on::after { content: ""; position: absolute; left: .9mm; top: -.4mm; width: 1.2mm; height: 2.4mm; border: solid var(--shu); border-width: 0 .6mm .6mm 0; transform: rotate(40deg); }
+
+/* ---- メモと記念スタンプ ---- */
+.bk .ruled { height: 92mm; background: repeating-linear-gradient(to bottom, transparent 0 8.5mm, var(--rule) 8.5mm 8.8mm); }
+.bk .stamp-slots { display: flex; justify-content: space-between; margin-top: 8mm; }
+.bk .stamp-slots span { width: 34mm; height: 34mm; border-radius: 50%; border: 1.2px dashed var(--ink-soft); }
+.bk .slot-note { text-align: center; color: var(--ink-soft); font-size: 8.5pt; margin-top: 3mm; }
+
+/* ---- 裏表紙 ---- */
+.bk .back { background: var(--ink); color: var(--paper); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.bk .back-word { writing-mode: vertical-rl; font-family: var(--serif); font-size: 26pt; letter-spacing: .4em; margin: 0 0 24mm; }
+.bk .stub { border: 1.2px dashed rgba(244, 246, 241, .6); padding: 4mm 7mm; display: grid; text-align: center; font-size: 8.5pt; gap: 1mm; }
+
+/* ---- 印刷（PDF 保存）：冊子のページだけを A5 で出す ---- */
+@media print {
+  @page { size: 148mm 210mm; margin: 0; }
+  body > main { display: none !important; }
+  #booklet { position: static; overflow: visible; background: none; padding: 0; }
+  #booklet .bk-bar, #booklet .bk-hint, #booklet .bk-themes { display: none !important; }
+  .sheet { width: auto !important; height: auto !important; margin: 0; }
+  .sheet > .page { transform: none !important; box-shadow: none; break-after: page; }
+  .sheet:last-child > .page { break-after: auto; }
+  .bk .page { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* ======================================================================
+   デザインの切り替え（冊子の上部のボタン）
+   ====================================================================== */
+#booklet .bk-themes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; padding: 0 16px 8px; }
+#booklet .bk-themes button {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid #6b7a90; background: transparent; color: #dfe6ee;
+  border-radius: 999px; padding: 5px 12px; min-height: 34px; font: inherit; font-size: .85rem; cursor: pointer;
+}
+#booklet .bk-themes button[aria-pressed="true"] { background: #f4f6f1; color: #23395d; border-color: #f4f6f1; font-weight: 700; }
+#booklet .bk-themes i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+#booklet .bk-themes button:focus-visible, #booklet .bk-bar button:focus-visible { outline: 2px solid #e3a72f; outline-offset: 2px; }
+
+/* 題名が長いとき（駅スタンプ帳） */
+.bk .cover-title.t-mid { font-size: 24pt; }
+.bk .cover-title.t-long { font-size: 19pt; }
+
+/* ======================================================================
+   絵日記：方眼の紙・クレヨンの色・手書きの文字
+   ====================================================================== */
+.bk.theme-diary {
+  --paper: #ffffff; --ink: #34465a; --ink-soft: #758496; --shu: #e4572e; --yamabuki: #f6c344; --leaf: #4f9d69; --rule: #cfe0ef;
+  --serif: "Klee One", "Hiragino Maru Gothic ProN", sans-serif; --sans: "Klee One", "Hiragino Maru Gothic ProN", sans-serif;
+}
+.bk.theme-diary .page {
+  background-color: var(--paper);
+  background-image: linear-gradient(#e6eff8 .25mm, transparent .25mm), linear-gradient(90deg, #e6eff8 .25mm, transparent .25mm);
+  background-size: 5mm 5mm; background-position: -.1mm -.1mm;
+}
+.bk.theme-diary .page-title { font-weight: 600; background: linear-gradient(transparent 62%, var(--yamabuki) 62%); display: inline-block; padding: 0 2mm; }
+.bk.theme-diary .cover { padding: 18mm 14mm; text-align: center; }
+.bk.theme-diary .diary-label { font-size: 13pt; letter-spacing: .4em; color: var(--shu); margin: 4mm 0 0; font-weight: 600; }
+.bk.theme-diary .diary-sun { position: absolute; top: 9mm; right: 10mm; width: 30mm; fill: var(--yamabuki); stroke: var(--shu); stroke-width: 3; stroke-linecap: round; transform: rotate(8deg); }
+.bk.theme-diary .diary-frame {
+  margin: 28mm 4mm 0; padding: 14mm 8mm; border: 2.4px solid var(--ink);
+  border-radius: 255px 18px 225px 18px / 18px 225px 18px 255px; background: rgba(255, 255, 255, .85);
+}
+.bk.theme-diary .cover-title { position: static; writing-mode: horizontal-tb; height: auto; font-size: 25pt; font-weight: 600; letter-spacing: .06em; line-height: 1.45; }
+.bk.theme-diary .cover-title.t-mid { font-size: 20pt; }
+.bk.theme-diary .cover-title.t-long { font-size: 16pt; }
+.bk.theme-diary .cover-meta { text-align: left; border-top: 2px dashed var(--ink); background: rgba(255, 255, 255, .85); }
+.bk.theme-diary .day-head { border-bottom: 2px dashed var(--ink); flex-wrap: wrap; }
+.bk.theme-diary .day-num { font-weight: 600; font-size: 22pt; background: linear-gradient(transparent 60%, var(--yamabuki) 60%); padding: 0 1.5mm; }
+.bk.theme-diary .weather { margin-left: auto; font-size: 10pt; letter-spacing: .1em; }
+.bk.theme-diary .picture {
+  height: 52mm; margin: -2mm 0 7mm; border: 2px dashed var(--ink-soft); border-radius: 4mm; background: rgba(255, 255, 255, .8);
+  display: grid; place-items: center; color: var(--ink-soft); font-size: 9.5pt; letter-spacing: .1em;
+}
+.bk.theme-diary .line::before, .bk.theme-diary .route::before { background: var(--leaf); }
+.bk.theme-diary .stop-dot, .bk.theme-diary .st-dot { border-color: var(--leaf); background: #fff; }
+.bk.theme-diary .kind-stay .stop-dot { border-color: var(--shu); }
+.bk.theme-diary .stop-body b, .bk.theme-diary .st-day { font-weight: 600; }
+.bk.theme-diary .ruled.tall { height: 150mm; }
+.bk.theme-diary .ruled { background: repeating-linear-gradient(to bottom, transparent 0 9.7mm, #9fbad3 9.7mm 10mm); }
+.bk.theme-diary .back { background: var(--yamabuki); color: var(--ink); background-image: none; }
+.bk.theme-diary .back-word { writing-mode: horizontal-tb; font-size: 28pt; font-weight: 600; letter-spacing: .1em; margin: 0; transform: rotate(-4deg); }
+.bk.theme-diary .back-sub { margin-top: 8mm; font-size: 11pt; }
+
+/* ======================================================================
+   和モダン：墨と金の表紙・落款・お品書きのような並び
+   ====================================================================== */
+.bk.theme-washoku {
+  --paper: #f7f7f3; --ink: #2d2a26; --ink-soft: #7b746b; --shu: #8e2f3c; --yamabuki: #b0864b; --gold-pale: #e7d7b5; --rule: #d9d4cc;
+  --serif: "Shippori Mincho", "Hiragino Mincho ProN", serif; --sans: "Shippori Mincho", "Hiragino Mincho ProN", serif;
+}
+.bk.theme-washoku .page { line-height: 1.85; }
+.bk.theme-washoku .cover { background: var(--ink); color: var(--gold-pale); }
+.bk.theme-washoku .wa-frame { position: absolute; inset: 8mm; border: .7pt solid var(--yamabuki); }
+.bk.theme-washoku .wa-frame::after { content: ""; position: absolute; inset: 2mm; border: .3pt solid var(--yamabuki); }
+.bk.theme-washoku .cover-title {
+  top: 30mm; right: 50%; transform: translateX(50%); height: 125mm; color: var(--gold-pale);
+  font-size: 28pt; font-weight: 700; letter-spacing: .32em; line-height: 1.6;
+}
+.bk.theme-washoku .cover-title.t-mid { font-size: 22pt; letter-spacing: .2em; }
+.bk.theme-washoku .cover-title.t-long { font-size: 17pt; letter-spacing: .12em; }
+.bk.theme-washoku .seal {
+  position: absolute; left: 22mm; bottom: 40mm; width: 17mm; height: 17mm; background: var(--shu); color: var(--paper);
+  display: grid; place-items: center; writing-mode: vertical-rl; font-size: 9.5pt; font-weight: 700; letter-spacing: .1em;
+  border-radius: 1mm; transform: rotate(-3deg);
+}
+.bk.theme-washoku .wa-sub {
+  position: absolute; left: 16mm; right: 16mm; bottom: 16mm; margin: 0; display: grid; gap: 1mm;
+  text-align: center; font-size: 9pt; line-height: 1.5; letter-spacing: .2em; color: var(--yamabuki);
+}
+.bk.theme-washoku .page-title { font-weight: 700; letter-spacing: .3em; border-bottom: 3px double var(--rule); padding-bottom: 3mm; }
+.bk.theme-washoku .sub-title { letter-spacing: .2em; }
+.bk.theme-washoku .day-head { border-bottom: 3px double var(--rule); }
+.bk.theme-washoku .day-num { font-size: 21pt; letter-spacing: .2em; display: inline-flex; align-items: center; gap: 3mm; }
+.bk.theme-washoku .day-num::before { content: ""; width: 3mm; height: 3mm; background: var(--shu); }
+.bk.theme-washoku .line::before { display: none; }
+.bk.theme-washoku .stop { grid-template-columns: 16mm 1fr; padding: 3.2mm 0; border-bottom: .5pt solid var(--rule); }
+.bk.theme-washoku .stop-dot { display: none; }
+.bk.theme-washoku .stop-time { color: var(--yamabuki); text-align: left; font-weight: 500; padding-top: .6mm; }
+.bk.theme-washoku .stop-body { padding-top: 0; }
+.bk.theme-washoku .stop-body b { font-size: 11.5pt; letter-spacing: .05em; }
+.bk.theme-washoku .kind-stay .stop-body b::after { content: "　宿"; color: var(--shu); font-size: 8.5pt; }
+.bk.theme-washoku .route::before { height: .6mm; top: 3.6mm; background: var(--yamabuki); }
+.bk.theme-washoku .route-vertical::before { width: .6mm; height: auto; left: 3.6mm; }
+.bk.theme-washoku .st-dot { border: none; background: var(--shu); width: 4.6mm; height: 4.6mm; margin-top: 1.5mm; }
+.bk.theme-washoku .route-vertical .st-dot { width: 4.6mm; height: 4.6mm; margin: 0 1.5mm; }
+.bk.theme-washoku .st-page { color: var(--shu); }
+.bk.theme-washoku .box.on::after { border-color: var(--shu); }
+.bk.theme-washoku .ruled.tall { height: 150mm; }
+.bk.theme-washoku .back { background: var(--ink); color: var(--gold-pale); }
+.bk.theme-washoku .back .seal { position: static; margin-bottom: 14mm; }
+.bk.theme-washoku .back .seal.small { width: 14mm; height: 14mm; font-size: 8pt; }
+.bk.theme-washoku .back-word { letter-spacing: .5em; font-size: 22pt; margin: 0; }
+
+/* ======================================================================
+   旅行雑誌：大きな行き先・ステッカー・はっきりした色
+   ====================================================================== */
+.bk.theme-magazine {
+  --paper: #ffffff; --ink: #1b1b3a; --ink-soft: #5b5b7a; --shu: #ff4f87; --yamabuki: #ffd23f; --blue: #2f5bff; --rule: #e2e2ef;
+  --serif: "Dela Gothic One", "Hiragino Sans", sans-serif; --sans: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", sans-serif;
+}
+.bk.theme-magazine .cover { background: var(--blue); color: #fff; padding: 11mm 12mm; }
+.bk.theme-magazine .mag-mast { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--serif); font-size: 15pt; border-bottom: 1.5px solid #fff; padding-bottom: 2mm; }
+.bk.theme-magazine .mag-mast span { font-family: var(--sans); font-size: 8.5pt; font-weight: 800; }
+.bk.theme-magazine .mag-dest { font-family: var(--serif); font-size: 60pt; line-height: 1.08; margin: 16mm 0 0; letter-spacing: -.01em; }
+.bk.theme-magazine .mag-dest.d-mid { font-size: 46pt; }
+.bk.theme-magazine .mag-dest.d-long { font-size: 28pt; }
+.bk.theme-magazine .mag-sticker {
+  position: absolute; right: 10mm; top: 88mm; width: 34mm; height: 34mm; border-radius: 50%; background: var(--yamabuki); color: var(--ink);
+  display: grid; place-items: center; font-family: var(--serif); font-size: 14pt; transform: rotate(12deg);
+  box-shadow: 0 0 0 1.4mm #fff;
+}
+.bk.theme-magazine .cover-title {
+  position: absolute; top: auto; right: auto; left: 12mm; bottom: 46mm; width: 80mm; height: auto; writing-mode: horizontal-tb;
+  font-family: var(--sans); font-weight: 800; font-size: 16pt; letter-spacing: .02em; line-height: 1.4; color: #fff;
+}
+.bk.theme-magazine .cover-title.t-mid { font-size: 13.5pt; }
+.bk.theme-magazine .cover-title.t-long { font-size: 11.5pt; }
+.bk.theme-magazine .cover-meta { left: 12mm; right: 12mm; bottom: 11mm; border-top-color: #fff; }
+.bk.theme-magazine .cover-meta dt { color: #c9d4ff; }
+.bk.theme-magazine .page-title { font-weight: 400; background: linear-gradient(transparent 58%, var(--yamabuki) 58%); display: inline-block; padding: 0 1.5mm; }
+.bk.theme-magazine .sub-title { font-weight: 400; }
+.bk.theme-magazine .stop-body b { font-weight: 800; }
+.bk.theme-magazine .day-head { border-bottom: none; }
+.bk.theme-magazine .day-num {
+  font-weight: 400; font-size: 19pt; background: var(--shu); color: #fff; padding: 2.2mm 5mm 2.6mm; border-radius: 3mm;
+  transform: rotate(-3deg); display: inline-block;
+}
+.bk.theme-magazine .day-head.cont .day-num { font-size: 13pt; }
+.bk.theme-magazine .line::before, .bk.theme-magazine .route::before { background: var(--blue); }
+.bk.theme-magazine .stop-dot, .bk.theme-magazine .st-dot { border-color: var(--blue); background: var(--yamabuki); }
+.bk.theme-magazine .kind-stay .stop-dot { border-color: var(--shu); }
+.bk.theme-magazine .stop-time {
+  justify-self: end; align-self: start; margin-top: 1mm; padding: .4mm 1.8mm; border-radius: 99px;
+  background: var(--ink); color: #fff; font-size: 8.5pt; text-align: center;
+}
+.bk.theme-magazine .st-day { font-weight: 400; }
+.bk.theme-magazine .st-page { color: var(--shu); font-weight: 800; }
+.bk.theme-magazine .box { border-radius: 1mm; border-width: 1.6px; }
+.bk.theme-magazine .box.on::after { border-color: var(--shu); }
+.bk.theme-magazine .ruled.tall { height: 150mm; }
+.bk.theme-magazine .back { background: var(--yamabuki); color: var(--ink); }
+.bk.theme-magazine .back-word { writing-mode: horizontal-tb; font-family: var(--serif); font-size: 30pt; letter-spacing: .04em; margin: 0; transform: rotate(-4deg); }
