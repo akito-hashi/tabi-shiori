@@ -2,9 +2,10 @@
 // アプリのファイル：ネットから最新を取り、つながらないときだけ保存済みを使う。
 // 冊子の書体（Google Fonts）：一度読み込んだものを保存して使う（圏外でも冊子がきれいに出る）。
 // ファイルを追加・改名したときは FILES を直し、VERSION の数字を上げる。
-const VERSION = "v1";
+const VERSION = "v2";
 const CACHE = "tabi-shiori-" + VERSION;
 const FONT_CACHE = "tabi-shiori-fonts";
+const SDK = "https://www.gstatic.com/firebasejs/11.10.0/";
 const FILES = [
   "./",
   "./index.html",
@@ -13,6 +14,10 @@ const FILES = [
   "./booklet.css",
   "./share.js",
   "./planner.js",
+  "./ops.js",
+  "./store.js",
+  "./cloud.js",
+  "./firebase-config.js",
   "./manifest.webmanifest",
   "./icons/icon-180.png",
   "./icons/icon-192.png",
@@ -36,7 +41,8 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  if (url.origin === "https://fonts.googleapis.com" || url.origin === "https://fonts.gstatic.com") {
+  // 冊子の書体と、みんなで編集の部品（Firebase SDK、版を固定しているので一度保存すれば変わらない）
+  if (url.origin === "https://fonts.googleapis.com" || url.origin === "https://fonts.gstatic.com" || req.url.startsWith(SDK)) {
     event.respondWith(
       caches.open(FONT_CACHE).then((c) => c.match(req).then((hit) => hit || fetch(req).then((res) => {
         if (res.ok || res.type === "opaque") c.put(req, res.clone());

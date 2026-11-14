@@ -106,8 +106,9 @@ test("圏外で上げようとすると offline になり、何も作られな�
   const db = rawDbOf(a);
   await F.disableNetwork(db);
   try {
-    await rejectsWithCode(a.createTripFromLocal(localTrip()), "offline");
+    await rejectsWithCode(a.createTripFromLocal({ ...localTrip(), name: "_test_圏外" }), "offline");
   } finally { await F.enableNetwork(db); }
-  const list = await waitFor((cb) => a.watchTrips(cb), () => true);
-  assert.ok(!list.some((x) => x.name === "_test_金沢"));
+  // サーバーに問い合わせて、この名前の旅行が作られていないことを確かめる
+  const s = await F.getDocsFromServer(F.query(F.collection(db, "trips"), F.where("memberUids", "array-contains", a.uid)));
+  assert.ok(!s.docs.some((d) => d.data().name === "_test_圏外"));
 });
