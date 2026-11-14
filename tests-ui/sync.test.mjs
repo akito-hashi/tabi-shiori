@@ -267,9 +267,36 @@ test("ドラッグ中にその日の別の予定が他の人に消されても�
 });
 
 test("みんなで編集を使ったあとは、Firebase の部品がスマホに保存されている（次に圏外で開いても読み込める）", async () => {
-  const a = await device(0, { trips: [localTrip("_test_部品の保存")] });
+  // 招待リンクから初めて開いたときと同じく、オフライン用の仕組み（Service Worker）がまだ画面を受け持っていない状態
+  const ctx3 = await browser.createBrowserContext();
+  const a = await ctx3.newPage();
+  pages.push(a);
+  a.errors = []; a.dialogs = [];
+  a.on("dialog", (d) => { a.dialogs.push(d.message()); d.accept(); });
+  await a.setBypassServiceWorker(true);
+  await a.goto(BASE + "manifest.webmanifest");
+  await a.evaluate((t) => localStorage.setItem("tabi-shiori-v1", JSON.stringify({ trips: [t], currentId: t.id })), localTrip("_test_部品の保存"));
+  await a.goto(BASE);
   await shareToGroup(a);
   await waitFor(a, () => caches.open("tabi-shiori-fonts").then((c) => Promise.all(
     ["firebase-app.js", "firebase-auth.js", "firebase-firestore.js"].map((f) => c.match("https://www.gstatic.com/firebasejs/11.10.0/" + f))))
-    .then((hits) => hits.every(Boolean)));
+    .then((hits) => hits.every(Boolean)), null, 10000);
+});
+
+test("圏外で旅行を削除しようとすると、日本語で知らせ、何も消えない（相手の画面にも残る）", async () => {
+  const a = await device(0, { trips: [localTrip("_test_圏外で削除")] });
+  const { local, id } = await shareToGroup(a);
+  const b = await device(1, { url: local });
+  await waitFor(b, (id) => trip() && trip().id === id && trip().items.length === 2, id);
+  await a.setOfflineMode(true);
+  await a.click("#deleteTrip");
+  await waitFor(a, () => true);
+  await new Promise((r) => setTimeout(r, 1500));
+  const after = a.dialogs.filter((m) => !/削除します/.test(m));
+  assert.ok(after.some((m) => /インターネットにつながっていません/.test(m)), JSON.stringify(a.dialogs));
+  await a.setOfflineMode(false);
+  await new Promise((r) => setTimeout(r, 3000));
+  // 相手の画面には、予定も含めてそのまま残っている
+  assert.equal(await b.evaluate((id) => !!(trip() && trip().id === id && trip().items.length === 2), id), true);
+  assert.equal(await a.evaluate((id) => state.trips.some((t) => t.id === id), id), true);
 });

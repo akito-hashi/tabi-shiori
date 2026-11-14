@@ -1,10 +1,11 @@
 // firestore.rules を本番の Firebase に対して確認する。
 // 使い方: tabi-shiori フォルダで `npm install` のあと `npm run check:rules`。
 // 確認用の旅行と匿名ユーザー約50件を作り、旅行は最後に削除する（匿名ユーザーの作成は 1時間に約100件までなので、何度も続けて動かさない）。
+// SKIP_CAP=1 を付けると、51台目の参加の確認（匿名ユーザーを約50件作る）を省く。
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import {
-  getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, addDoc, collection, getDocs, query, where, arrayUnion, arrayRemove, terminate,
+  getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, addDoc, collection, getDocs, query, where, arrayUnion, arrayRemove, terminate, writeBatch,
 } from "firebase/firestore";
 import { firebaseConfig } from "../firebase-config.js";
 import { newTripId } from "../store.js";
@@ -36,6 +37,25 @@ const trip = (uids) => ({ name: "_test_", start: "2026-12-18", end: "2026-12-19"
 try {
   await expect("旅行の作成（作成者のみ memberUids）", true, () => setDoc(tripRef(owner), trip([owner.uid])));
   await expect("他人を memberUids に入れた旅行の作成", false, () => setDoc(doc(owner.db, "trips", newTripId()), trip([owner.uid, "x"])));
+  const batchTrip = newTripId();
+  await expect("旅行本体と中身を 1回のまとめ書き込みで作る", true, async () => {
+    const b = writeBatch(owner.db);
+    b.set(doc(owner.db, "trips", batchTrip), trip([owner.uid]));
+    b.set(doc(collection(owner.db, "trips", batchTrip, "items")), { title: "まとめて" });
+    b.set(doc(collection(owner.db, "trips", batchTrip, "packs")), { name: "財布" });
+    await b.commit();
+  });
+  await expect("他人の旅行に、まとめ書き込みで中身だけ足す", false, async () => {
+    const b = writeBatch(outsider.db);
+    b.set(doc(collection(outsider.db, "trips", batchTrip, "items")), { title: "割り込み" });
+    await b.commit();
+  });
+  await expect("中身とまとめて旅行本体を削除する", true, async () => {
+    const b = writeBatch(owner.db);
+    for (const k of ["items", "packs"]) for (const d of (await getDocs(collection(owner.db, "trips", batchTrip, k))).docs) b.delete(d.ref);
+    b.delete(doc(owner.db, "trips", batchTrip));
+    await b.commit();
+  });
   await expect("参加者が予定を追加", true, () => addDoc(collection(owner.db, "trips", tripId, "items"), { title: "兼六園" }));
   await expect("参加者が持ち物を追加", true, () => addDoc(collection(owner.db, "trips", tripId, "packs"), { name: "財布" }));
   await expect("決められた以外の中身（secrets）", false, () => setDoc(doc(owner.db, "trips", tripId, "secrets", "AAAAAAAAAAAAAAAAAAAA"), { x: 1 }));
@@ -61,6 +81,7 @@ try {
   await expect("抜けたあとは予定を読めない", false, () => getDocs(collection(joiner.db, "trips", tripId, "items")));
 
   // 上限 50 台：owner 1台。あと 49 台参加させて 50 台、51 台目は拒否
+  if (process.env.SKIP_CAP) { console.log("      51台目の確認は省略（SKIP_CAP）"); throw "skip"; }
   for (let i = 0; i < 49; i++) {
     const c = await client();
     clients.push(c);
@@ -70,6 +91,8 @@ try {
   const c51 = await client();
   clients.push(c51);
   await expect("51 台目の参加", false, () => updateDoc(tripRef(c51), { memberUids: arrayUnion(c51.uid) }));
+} catch (e) {
+  if (e !== "skip") throw e;
 } finally {
   try {
     for (const k of ["items", "wishes", "packs"]) {

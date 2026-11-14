@@ -36,6 +36,18 @@ export async function newDevice() {
   return pool[i];
 }
 
+// 通信を切ったりつないだりするテスト用の、使い回さない新しい端末。
+// 使い回しの端末にやり取り中の見張りが残っていると、強制的に通信を切ったときに Firebase の部品の中で
+// 状態が食い違うことがある（テストのやり方の問題で、アプリでは強制的に切らない）。
+export async function freshDevice() {
+  const appName = "f" + Date.now() + "-" + n++;
+  const store = createStore(fb, firebaseConfig, { appName });
+  await store.init();
+  raw.set(store, firestore.getFirestore(app.getApp(appName)));
+  opened.push(store);
+  return store;
+}
+
 export async function closeAll() {
   for (const s of opened.splice(0)) await s.close();
 }

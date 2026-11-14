@@ -1,7 +1,7 @@
 // 本物の Firebase に対するテスト（npm run test:firebase）。各テストは自分で作った旅行を最後に削除する。
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { newDevice, closeAll, waitFor, rejectsWithCode, rawDbOf, fb } from "./helpers.mjs";
+import { newDevice, freshDevice, closeAll, waitFor, rejectsWithCode, rawDbOf, fb } from "./helpers.mjs";
 
 after(closeAll);
 const F = fb.firestore;
@@ -102,7 +102,7 @@ test("他人を外す・参加と同時に書き換える・形のおかしい I
 });
 
 test("圏外で上げようとすると offline になり、何も作られない", async () => {
-  const a = await newDevice();
+  const a = await freshDevice();
   const db = rawDbOf(a);
   await F.disableNetwork(db);
   try {
@@ -140,19 +140,8 @@ test("文書の中に id という項目が入っていても、本当の文書 
   } finally { await a.deleteTrip(id); }
 });
 
-test("圏外では旅行を削除できず offline になり、中身も消えない", async () => {
-  const a = await newDevice();
-  const { id } = await a.createTripFromLocal(localTrip());
-  const db = rawDbOf(a);
-  try {
-    await watch(a, id, (t) => t.items.length === 1);
-    await F.disableNetwork(db);
-    await rejectsWithCode(a.deleteTrip(id), "offline");
-    await F.enableNetwork(db);
-    const s = await F.getDocsFromServer(F.collection(db, "trips", id, "items"));
-    assert.equal(s.size, 1);
-  } finally { await F.enableNetwork(db); await a.deleteTrip(id); }
-});
+// 圏外での削除は、Node で通信を強制的に切ると Firebase の部品の中で状態が食い違うため、
+// 実際の圏外に近い画面テスト（tests-ui/sync.test.mjs）で確かめる
 
 test("上げるときは旅行本体と中身を一度に書く（中身の欠けた旅行が一覧に出ない）", async () => {
   const a = await newDevice();
