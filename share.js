@@ -118,8 +118,10 @@
     throw new Error("共有リンクの形式が正しくありません");
   }
 
+  // ?openExternalBrowser=1：LINE でタップしたとき、LINE の中のブラウザではなく Safari / Chrome で開く
+  // （LINE の中のブラウザは印刷＝PDF 保存に対応していないため）
   async function shareUrl(t) {
-    return SHARE_BASE + "#share=" + (await encode(t));
+    return SHARE_BASE + "?openExternalBrowser=1#share=" + (await encode(t));
   }
 
   // 「#share=...」を含む文字列から共有コードを取り出す（なければ null）

@@ -261,7 +261,8 @@
   </div>
   <p class="bk-hint" id="bkSharedNote" hidden>共有されたしおりです。「自分のしおりに追加」を押すと、このアプリで予定を見たり直したりできます。</p>
   <div class="bk-themes" id="bkThemes" role="group" aria-label="冊子のデザイン"></div>
-  <p class="bk-hint">「PDFで保存」を押し、送信先で「PDFに保存」を選んでください（iPhone は共有メニューの「プリント」から保存できます）</p>
+  <p class="bk-hint" id="bkPrintHint">「PDFで保存」を押し、送信先で「PDFに保存」を選んでください（iPhone は共有メニューの「プリント」から保存できます）</p>
+  <p class="bk-hint" id="bkLineNote" hidden>LINE の中で開いています。LINE の中では PDF を保存できないため、「PDFで保存」を押すと Safari / Chrome で開き直します。</p>
   <div id="bkPages"></div>
 </div>
 
@@ -701,6 +702,8 @@
       $("bkPages").appendChild(sheet);
     }
     $("booklet").hidden = false;
+    $("bkLineNote").hidden = !isLineApp();
+    $("bkPrintHint").hidden = isLineApp();
     document.body.style.overflow = "hidden";
     document.title = `旅のしおり ${t.name}`; // PDF のファイル名になる
     requestAnimationFrame(fitSheets);
@@ -745,7 +748,21 @@
   }
   $("openBooklet").addEventListener("click", () => openBooklet());
   $("bkClose").addEventListener("click", closeBooklet);
-  $("bkPrint").addEventListener("click", () => window.print());
+  // LINE の中のブラウザは印刷（＝PDF 保存）に対応していないので、外のブラウザで開き直す。
+  // LINE は URL に openExternalBrowser=1 が付いていると Safari / Chrome で開く。
+  const isLineApp = () => /\bLine\/\d/i.test(navigator.userAgent);
+  function openInBrowser() {
+    const u = new URL(location.href);
+    u.searchParams.set("openExternalBrowser", "1");
+    location.href = u.toString();
+  }
+  $("bkPrint").addEventListener("click", () => {
+    if (isLineApp()) {
+      if (confirm("LINE の中では PDF を保存できません。Safari / Chrome で開き直しますか？\n（開いたら、もう一度「PDFで保存」を押してください）")) openInBrowser();
+      return;
+    }
+    window.print();
+  });
   window.addEventListener("resize", () => { if (!$("booklet").hidden) fitSheets(); });
 
   // ---- 共有（リンクを LINE などで送る） ----

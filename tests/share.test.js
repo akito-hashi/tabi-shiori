@@ -71,3 +71,9 @@ test("壊れたリンクはエラーになる", async () => {
   await assert.rejects(L.decode("yAAAA"));
   await assert.rejects(L.decode("q123"));
 });
+
+test("共有リンクは LINE の中ではなく外のブラウザで開く指定が付き、中身も取り出せる", async () => {
+  const url = await L.shareUrl(sampleTrip());
+  assert.match(url, /^https:\/\/akito-hashi\.github\.io\/tabi-shiori\/\?openExternalBrowser=1#share=y[A-Za-z0-9_-]+$/);
+  assert.equal((await L.decode(L.codeFrom(url))).name, "冬の金沢 ふたり旅");
+});
