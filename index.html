@@ -70,6 +70,30 @@
   .body .memo { white-space: pre-wrap; color: var(--muted); font-size: .88rem; }
   a.map { color: var(--accent); font-size: .88rem; text-decoration: none; }
 
+  /* 並べ替え（ドラッグ） */
+  .handle { flex: 0 0 auto; border: none; background: none; color: var(--muted); font-size: 1.1rem; line-height: 1;
+    padding: 4px 6px; min-height: 0; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; align-self: center; }
+  ul.items li.placeholder { opacity: .35; background: var(--soft); border-radius: 8px; }
+  .drag-ghost { position: fixed; z-index: 40; pointer-events: none; background: var(--card); border: 1px solid var(--accent);
+    border-radius: 10px; box-shadow: 0 10px 24px rgba(0,0,0,.25); padding: 8px 10px; display: flex; gap: 10px; }
+  body.dragging { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+  .auto-badge { font-size: .7rem; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0 6px; margin-left: 6px; vertical-align: 1px; }
+
+  /* 行きたい場所と自動で作る予定 */
+  ul.wishes { list-style: none; padding: 0; margin: 10px 0 0; }
+  ul.wishes li { display: flex; gap: 8px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--line); cursor: pointer; }
+  ul.wishes li:first-child { border-top: none; }
+  ul.wishes .meta { color: var(--muted); font-size: .85rem; }
+  .plan-hours { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; font-size: .9rem; }
+  .plan-hours input { width: auto; flex: 0 0 auto; }
+  #planPreview { margin-top: 14px; padding-top: 12px; border-top: 2px dashed var(--line); }
+  #planPreview h3 { font-size: .95rem; margin: 12px 0 4px; }
+  #planPreview ul { list-style: none; padding: 0; margin: 0; }
+  #planPreview li { display: flex; gap: 8px; padding: 4px 0; font-size: .92rem; }
+  #planPreview li.kept { color: var(--muted); }
+  #planPreview li.new b { color: var(--accent); }
+  .leftover { color: var(--danger); font-size: .9rem; }
+
   ul.packs { list-style: none; padding: 0; margin: 0; }
   ul.packs li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
   ul.packs li:first-child { border-top: none; }
@@ -126,6 +150,49 @@
       <div id="nextPlace"></div>
     </section>
 
+    <!-- 行きたい場所と、予定の自動作成 -->
+    <section class="card" id="wishCard">
+      <h2>行きたい場所 <span class="muted" id="wishCount"></span></h2>
+      <p class="muted" style="margin:0 0 8px">行きたい場所を入れて「予定を自動で作る」を押すと、エリアと所要時間から日ごとの予定を組みます。</p>
+      <form id="wishForm">
+        <div class="row">
+          <div><label class="small" for="wName">場所の名前</label><input id="wName" placeholder="例：兼六園" maxlength="60" autocomplete="off"></div>
+          <div><label class="small" for="wArea">エリア（同じエリアは同じ日にまとめます）</label><input id="wArea" list="areaList" placeholder="例：兼六園周辺" maxlength="30" autocomplete="off"></div>
+        </div>
+        <datalist id="areaList"></datalist>
+        <div class="row">
+          <div><label class="small" for="wDur">所要時間</label>
+            <select id="wDur">
+              <option value="30">30分</option><option value="60" selected>1時間</option><option value="90">1時間半</option>
+              <option value="120">2時間</option><option value="180">3時間</option><option value="240">半日（4時間）</option>
+            </select></div>
+          <div><label class="small" for="wKind">種類</label>
+            <select id="wKind"><option value="sight">📍 観光</option><option value="food">🍽 食事</option><option value="other">📝 その他</option></select></div>
+          <div><label class="small" for="wDay">この日に行きたい</label><select id="wDay"></select></div>
+        </div>
+        <p class="error" id="wishError"></p>
+        <div class="actions">
+          <button class="primary" type="submit" id="wishSave">追加</button>
+          <button type="button" id="wishCancel" hidden>やめる</button>
+          <button type="button" class="danger" id="wishDelete" hidden>削除</button>
+        </div>
+      </form>
+      <ul class="wishes" id="wishes"></ul>
+      <div class="plan-hours">
+        <span>活動時間</span><input id="pStart" type="time" value="09:00"><span>から</span><input id="pEnd" type="time" value="18:00"><span>まで</span>
+      </div>
+      <div class="actions"><button type="button" class="primary" id="makePlan">予定を自動で作る</button></div>
+      <div id="planPreview" hidden>
+        <strong>下書き</strong> <span class="muted">（青い太字が自動で入れる予定です）</span>
+        <div id="planDays"></div>
+        <p class="leftover" id="planLeftover"></p>
+        <div class="actions">
+          <button type="button" class="primary" id="planApply">この内容で追加</button>
+          <button type="button" id="planCancel">やめる</button>
+        </div>
+      </div>
+    </section>
+
     <!-- 予定の追加・編集 -->
     <section class="card" id="itemFormCard" hidden>
       <h2 id="itemFormTitle">予定を追加</h2>
@@ -133,6 +200,11 @@
         <div class="row">
           <div><label class="small" for="iDate">日</label><select id="iDate"></select></div>
           <div><label class="small" for="iTime">時刻（空欄なら終日）</label><input id="iTime" type="time"></div>
+          <div><label class="small" for="iDur">所要時間</label>
+            <select id="iDur">
+              <option value="15">15分</option><option value="30">30分</option><option value="45">45分</option><option value="60" selected>1時間</option>
+              <option value="90">1時間半</option><option value="120">2時間</option><option value="180">3時間</option><option value="240">4時間</option><option value="360">6時間</option>
+            </select></div>
           <div><label class="small" for="iKind">種類</label>
             <select id="iKind">
               <option value="sight">📍 観光</option>
@@ -190,6 +262,7 @@
 <script src="logic.js"></script>
 <script src="booklet.js"></script>
 <script src="share.js"></script>
+<script src="planner.js"></script>
 <script>
   const KEY = "tabi-shiori-v1";
   const KINDS = { sight: "📍", food: "🍽", move: "🚃", stay: "🏨", other: "📝" };
@@ -253,17 +326,19 @@
         return `<li data-item="${esc(it.id)}" class="${cls}">
           <div class="time">${esc(it.time || "終日")}</div>
           <div class="kind">${KINDS[it.kind] || ""}</div>
-          <div class="body"><div>${esc(it.title)}</div>
+          <div class="body"><div>${esc(it.title)}${it.auto ? '<span class="auto-badge">自動</span>' : ""}</div>
             ${it.place ? `<a class="map" href="${esc(mapUrl(it.place))}" target="_blank" rel="noopener">${esc(it.place)}</a>` : ""}
-            ${it.memo ? `<div class="memo">${esc(it.memo)}</div>` : ""}</div></li>`;
+            ${it.memo ? `<div class="memo">${esc(it.memo)}</div>` : ""}</div>
+          <button class="handle" type="button" data-handle aria-label="ドラッグして並べ替え" title="ドラッグして並べ替え">⋮⋮</button></li>`;
       }).join("");
       return `<section class="card day${d === today ? " today" : ""}">
         <h2><span>${i + 1}日目 <span class="muted">${md(d)}</span></span>
           <button class="text" type="button" data-add="${d}">＋ 予定</button></h2>
-        <ul class="items">${rows || '<li class="muted" style="cursor:default">まだ予定がありません</li>'}</ul></section>`;
+        <ul class="items" data-day="${d}">${rows || '<li class="muted empty-row" style="cursor:default">まだ予定がありません</li>'}</ul></section>`;
     }).join("");
 
     $("iDate").innerHTML = days.map((d, i) => `<option value="${d}">${i + 1}日目 ${md(d)}</option>`).join("");
+    renderWishes(t, days);
 
     const packs = t.packs || [];
     const done = packs.filter((x) => x.done).length;
@@ -306,6 +381,7 @@
       const outside = t.items.filter((it) => !days.has(it.date)).length;
       if (outside && !confirm(`期間の外になる予定が ${outside} 件あります。削除して保存しますか？`)) return;
       Object.assign(t, { name, dest, start, end, items: t.items.filter((it) => days.has(it.date)) });
+      for (const w of t.wishes || []) if (w.day && !days.has(w.day)) w.day = "";
     } else {
       const t = { id: uid(), name, dest, start, end, items: [], packs: [] };
       state.trips.push(t);
@@ -337,6 +413,7 @@
     $("itemDelete").hidden = !item;
     $("iDate").value = item ? item.date : date;
     $("iTime").value = item ? item.time : "";
+    $("iDur").value = String(item && item.duration ? item.duration : 60);
     $("iKind").value = item ? item.kind : "sight";
     $("iTitle").value = item ? item.title : "";
     $("iPlace").value = item ? item.place : "";
@@ -349,6 +426,7 @@
 
   $("days").addEventListener("click", (ev) => {
     if (ev.target.closest("a")) return; // 地図リンクはそのまま開く
+    if (ev.target.closest("[data-handle]")) return; // 並べ替えのつまみ
     const add = ev.target.closest("[data-add]");
     if (add) return openItemForm(add.dataset.add, null);
     const li = ev.target.closest("[data-item]");
@@ -360,7 +438,7 @@
     const title = $("iTitle").value.trim();
     if (!title) return ($("itemError").textContent = "内容を入力してください");
     const data = { date: $("iDate").value, time: $("iTime").value, kind: $("iKind").value, title,
-      place: $("iPlace").value.trim(), memo: $("iMemo").value.trim() };
+      place: $("iPlace").value.trim(), memo: $("iMemo").value.trim(), duration: Number($("iDur").value) || 60 };
     if (editingItem) Object.assign(editingItem, data);
     else trip().items.push({ id: uid(), ...data });
     closeItemForm();
@@ -374,6 +452,178 @@
     closeItemForm();
     save(); render();
   });
+
+  // ---- 行きたい場所 ----
+  const DUR_LABEL = { 30: "30分", 60: "1時間", 90: "1時間半", 120: "2時間", 180: "3時間", 240: "半日" };
+  let editingWish = null;
+  let planDraft = null;
+
+  function renderWishes(t, days) {
+    const wishes = t.wishes || [];
+    $("wishCount").textContent = wishes.length ? `${wishes.length} か所` : "";
+    $("wishes").innerHTML = wishes.map((w) => {
+      const dayNo = w.day ? days.indexOf(w.day) + 1 : 0;
+      const meta = [w.area, DUR_LABEL[w.duration] || `${w.duration}分`, dayNo ? `${dayNo}日目に行く` : ""].filter(Boolean).join("・");
+      return `<li data-wish="${esc(w.id)}"><span>${KINDS[w.kind] || ""}</span><span>${esc(w.name)}</span><span class="meta">${esc(meta)}</span></li>`;
+    }).join("") || '<li class="muted" style="cursor:default">まだありません</li>';
+    const areas = [...new Set(wishes.map((w) => w.area).filter(Boolean))];
+    $("areaList").innerHTML = areas.map((a) => `<option value="${esc(a)}"></option>`).join("");
+    const keepDay = $("wDay").value;
+    $("wDay").innerHTML = `<option value="">指定しない</option>` + days.map((d, i) => `<option value="${d}">${i + 1}日目 ${md(d)}</option>`).join("");
+    if ([...$("wDay").options].some((o) => o.value === keepDay)) $("wDay").value = keepDay;
+    $("pStart").value = t.planStart || "09:00";
+    $("pEnd").value = t.planEnd || "18:00";
+  }
+
+  function resetWishForm() {
+    editingWish = null;
+    $("wName").value = ""; $("wArea").value = ""; $("wDur").value = "60"; $("wKind").value = "sight"; $("wDay").value = "";
+    $("wishSave").textContent = "追加"; $("wishCancel").hidden = true; $("wishDelete").hidden = true; $("wishError").textContent = "";
+  }
+
+  $("wishForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const name = $("wName").value.trim();
+    if (!name) return ($("wishError").textContent = "場所の名前を入力してください");
+    const data = { name, area: $("wArea").value.trim(), duration: Number($("wDur").value), kind: $("wKind").value, day: $("wDay").value };
+    const t = trip();
+    t.wishes = t.wishes || [];
+    if (editingWish) Object.assign(editingWish, data);
+    else t.wishes.push({ id: uid(), ...data });
+    const area = data.area;
+    resetWishForm();
+    $("wArea").value = area; // 同じエリアを続けて入れやすいように残す
+    save(); render();
+    $("wName").focus();
+  });
+  $("wishes").addEventListener("click", (ev) => {
+    const li = ev.target.closest("[data-wish]");
+    if (!li) return;
+    const w = trip().wishes.find((x) => x.id === li.dataset.wish);
+    editingWish = w;
+    $("wName").value = w.name; $("wArea").value = w.area; $("wDur").value = String(w.duration); $("wKind").value = w.kind; $("wDay").value = w.day || "";
+    $("wishSave").textContent = "保存"; $("wishCancel").hidden = false; $("wishDelete").hidden = false;
+    $("wName").focus();
+  });
+  $("wishCancel").addEventListener("click", resetWishForm);
+  $("wishDelete").addEventListener("click", () => {
+    if (!editingWish) return;
+    const t = trip();
+    t.wishes = t.wishes.filter((w) => w !== editingWish);
+    resetWishForm();
+    save(); render();
+  });
+  for (const id of ["pStart", "pEnd"]) {
+    $(id).addEventListener("change", () => {
+      const t = trip();
+      t.planStart = $("pStart").value || "09:00";
+      t.planEnd = $("pEnd").value || "18:00";
+      save();
+    });
+  }
+
+  // ---- 予定を自動で作る（下書き → 追加） ----
+  $("makePlan").addEventListener("click", () => {
+    const t = trip();
+    const wishes = t.wishes || [];
+    if (!wishes.length) return alert("先に行きたい場所を入れてください");
+    const start = $("pStart").value || "09:00", end = $("pEnd").value || "18:00";
+    if (end <= start) return alert("活動時間の終わりは始まりより後にしてください");
+    const kept = t.items.filter((it) => !it.auto);
+    const days = Shiori.tripDays(t.start, t.end);
+    const { items, leftover } = Planner.planTrip({
+      days, dayStart: start, dayEnd: end, wishes,
+      fixed: kept.filter((it) => it.time).map((it) => ({ date: it.date, time: it.time, kind: it.kind })),
+    });
+    planDraft = { items, replaced: t.items.length - kept.length };
+    const all = Shiori.sortItems([...kept.map((it) => ({ ...it, _kept: true })), ...items]);
+    $("planDays").innerHTML = days.map((d, i) => {
+      const list = all.filter((it) => it.date === d);
+      return `<h3>${i + 1}日目 <span class="muted">${md(d)}</span></h3><ul>${list.map((it) =>
+        `<li class="${it._kept ? "kept" : "new"}"><span class="time">${esc(it.time || "終日")}</span><span>${KINDS[it.kind] || ""}</span><b>${esc(it.title)}</b></li>`).join("")
+        || '<li class="muted">予定なし</li>'}</ul>`;
+    }).join("");
+    $("planLeftover").textContent = leftover.length
+      ? `入りきらなかった場所：${leftover.map((w) => w.name).join("、")}（活動時間を延ばすか、所要時間を短くしてください）` : "";
+    $("planApply").textContent = planDraft.replaced ? `この内容で追加（前に自動で入れた ${planDraft.replaced} 件と入れ替え）` : "この内容で追加";
+    $("planPreview").hidden = false;
+    $("planPreview").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  $("planApply").addEventListener("click", () => {
+    if (!planDraft) return;
+    const t = trip();
+    t.items = [...t.items.filter((it) => !it.auto), ...planDraft.items.map((it) => ({ id: uid(), ...it }))];
+    planDraft = null;
+    $("planPreview").hidden = true;
+    save(); render();
+    $("days").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  $("planCancel").addEventListener("click", () => { planDraft = null; $("planPreview").hidden = true; });
+
+  // ---- 予定のドラッグで並べ替え（日をまたいでも可）→ 時刻を組み直す ----
+  let drag = null;
+  const dayOrder = () => Object.fromEntries([...document.querySelectorAll("#days ul.items")].map((ul) =>
+    [ul.dataset.day, [...ul.querySelectorAll("li[data-item]")].map((li) => li.dataset.item)]));
+
+  $("days").addEventListener("pointerdown", (ev) => {
+    const handle = ev.target.closest("[data-handle]");
+    if (!handle || drag) return;
+    ev.preventDefault();
+    const li = handle.closest("li[data-item]");
+    const r = li.getBoundingClientRect();
+    const ghost = li.cloneNode(true);
+    ghost.className = "drag-ghost";
+    Object.assign(ghost.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px" });
+    document.body.appendChild(ghost);
+    li.classList.add("placeholder");
+    document.body.classList.add("dragging");
+    drag = { li, ghost, dy: ev.clientY - r.top, before: dayOrder(), pointerId: ev.pointerId };
+    try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
+  });
+
+  document.addEventListener("pointermove", (ev) => {
+    if (!drag || ev.pointerId !== drag.pointerId) return;
+    ev.preventDefault();
+    drag.ghost.style.top = ev.clientY - drag.dy + "px";
+    // 画面の端に近づいたらスクロール
+    if (ev.clientY < 70) window.scrollBy(0, -14);
+    else if (ev.clientY > window.innerHeight - 70) window.scrollBy(0, 14);
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    if (!el) return;
+    const over = el.closest("#days li[data-item]");
+    if (over && over !== drag.li) {
+      const r = over.getBoundingClientRect();
+      if (ev.clientY < r.top + r.height / 2) over.before(drag.li); else over.after(drag.li);
+      return;
+    }
+    const ul = el.closest("#days ul.items") || el.closest("#days .day")?.querySelector("ul.items");
+    if (ul && !ul.contains(drag.li)) {
+      ul.querySelector(".empty-row")?.remove();
+      ul.appendChild(drag.li);
+    }
+  }, { passive: false });
+
+  function endDrag(ev) {
+    if (!drag || (ev && ev.pointerId !== drag.pointerId)) return;
+    const { ghost, before } = drag;
+    drag = null;
+    ghost.remove();
+    document.body.classList.remove("dragging");
+    const after = dayOrder();
+    const t = trip();
+    const changed = Object.keys(after).filter((d) => (before[d] || []).join() !== after[d].join());
+    for (const d of changed) {
+      // 組み直しの開始時刻：その日にもともとあった予定の一番早い時刻（なければ活動時間の始まり）
+      const firstTimes = (before[d] || []).map((id) => t.items.find((x) => x.id === id)).filter((x) => x && x.time).map((x) => x.time).sort();
+      const start = firstTimes[0] || t.planStart || "09:00";
+      const ordered = after[d].map((id) => t.items.find((x) => x.id === id));
+      Shiori.retime(ordered, start).forEach((n, k) => Object.assign(ordered[k], { date: d, time: n.time }));
+    }
+    if (changed.length) save();
+    render();
+  }
+  document.addEventListener("pointerup", endDrag);
+  document.addEventListener("pointercancel", endDrag);
 
   // ---- 持ち物 ----
   $("packForm").addEventListener("submit", (ev) => {
@@ -541,7 +791,7 @@
   }
 
   // 旅行中は1分ごとに「次の予定」を更新
-  setInterval(() => { if (trip() && !editingItem && !editingTrip) render(); }, 60000);
+  setInterval(() => { if (trip() && !editingItem && !editingTrip && !drag) render(); }, 60000);
   if (!state.currentId && state.trips[0]) state.currentId = state.trips[0].id;
   render();
   openSharedFromHash();

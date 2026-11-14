@@ -35,7 +35,27 @@
     return { phase: "during", day: Math.round((parse(today) - parse(start)) / 86400000) + 1 };
   }
 
-  const api = { tripDays, sortItems, nextItem, tripPhase, toISO };
+  // 並べ替えた順に時刻を振り直す。先頭に続く「終日」の予定は終日のまま。
+  // 所要時間がなければ 60分、移動の目安は同じエリア 15分・違うエリア 30分（エリア不明なら 15分）。
+  // 移動・宿・食事は時刻が決まっていることが多いので、元の時刻より早めない（押されたときだけ後ろへ）。
+  const ANCHORED = new Set(["move", "stay", "food"]);
+  function retime(items, start) {
+    const toMin = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+    const toHM = (m) => (m >= 24 * 60 ? "23:59" : `${pad(Math.floor(m / 60))}:${pad(m % 60)}`);
+    let cursor = toMin(start);
+    let prev = null;
+    let leading = true;
+    return items.map((it) => {
+      if (leading && !it.time) return { ...it };
+      leading = false;
+      if (prev) cursor += (prev.duration || 60) + (prev.area && it.area && prev.area !== it.area ? 30 : 15);
+      if (ANCHORED.has(it.kind) && it.time) cursor = Math.max(cursor, toMin(it.time));
+      prev = it;
+      return { ...it, time: toHM(cursor) };
+    });
+  }
+
+  const api = { tripDays, sortItems, nextItem, tripPhase, toISO, retime };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Shiori = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
