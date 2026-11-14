@@ -1,0 +1,67 @@
+rules_version = '2';
+
+// 旅のしおり（グループで同時に編集）のアクセスルール
+// - 旅行とその中身を読み書きできるのは、旅行の memberUids に入っている端末（匿名 uid）だけ
+// - 招待リンク（＝旅行ID）を知っている端末は、自分の uid を memberUids に 1つ足す更新だけができる
+// - 参加者は自分の uid を memberUids から外せる（抜ける）。他人は外せない
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMemberOf(tripId) {
+      return signedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.memberUids;
+    }
+
+    function autoId(id) {
+      return id.matches('^[A-Za-z0-9]{20}$');
+    }
+
+    function validTrip(d) {
+      return d.name is string && d.name.size() >= 1 && d.name.size() <= 40
+        && d.start is string && d.end is string;
+    }
+
+    match /trips/{tripId} {
+      // ID を知っていれば存在確認（参加前の確認）ができる。一覧は自分が参加している旅行だけ。
+      allow get: if signedIn();
+      allow list: if signedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if signedIn()
+        && tripId.matches('^[A-Za-z0-9_-]{22}$')
+        && request.resource.data.memberUids == [request.auth.uid]
+        && validTrip(request.resource.data);
+
+      // 参加済み：中身は変えられるが memberUids は変えられない
+      allow update: if signedIn()
+        && request.auth.uid in resource.data.memberUids
+        && request.resource.data.memberUids == resource.data.memberUids
+        && validTrip(request.resource.data);
+
+      // 参加済み：自分だけを memberUids から外す（抜ける）
+      allow update: if signedIn()
+        && request.auth.uid in resource.data.memberUids
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids'])
+        && request.resource.data.memberUids == resource.data.memberUids.removeAll([request.auth.uid]);
+
+      // 未参加：自分を末尾に 1つ足すだけ（上限 50）
+      allow update: if signedIn()
+        && !(request.auth.uid in resource.data.memberUids)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids'])
+        && request.resource.data.memberUids == resource.data.memberUids.concat([request.auth.uid])
+        && request.resource.data.memberUids.size() <= 50;
+
+      allow delete: if signedIn() && request.auth.uid in resource.data.memberUids;
+
+      // 予定・行きたい場所・持ち物：参加者だけ。文書 ID は自動 ID 形式のみ
+      match /{kind}/{docId} {
+        allow read, delete: if (kind == 'items' || kind == 'wishes' || kind == 'packs') && isMemberOf(tripId);
+        allow create, update: if (kind == 'items' || kind == 'wishes' || kind == 'packs')
+          && isMemberOf(tripId) && autoId(docId);
+      }
+    }
+  }
+}
