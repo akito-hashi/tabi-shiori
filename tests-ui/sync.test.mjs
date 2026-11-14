@@ -202,3 +202,74 @@ test("2人いるときに一覧から外すと自分からだけ消え、最後�
   const exists = await a.evaluate(async (id) => (await cloud.store.joinTrip(id).then(() => true, (e) => e.code)), id);
   assert.equal(exists, "not-found");
 });
+
+// ---- 見直しで見つかった問題の再現 ----
+
+test("開いている旅行が他の人に削除されたら、入力欄を閉じて知らせ、別の旅行には書き込まない", async () => {
+  const other = { ...localTrip("_test_別の旅行"), id: "Lother" };
+  const a = await device(0, { trips: [localTrip("_test_削除される"), other] });
+  const { local, id } = await shareToGroup(a);
+  const b = await device(1, { url: local });
+  await waitFor(b, (id) => trip() && trip().id === id, id);
+  const target = (await cur(a)).items[0].id;
+  await a.click(`li[data-item="${target}"]`);
+  await a.$eval("#iTitle", (e) => { e.value = ""; });
+  await a.type("#iTitle", "書きかけ");
+  await b.evaluate((id) => cloud.store.deleteTrip(id), id);
+  await waitFor(a, () => document.querySelector("#itemFormCard").hidden);
+  assert.ok(a.dialogs.some((m) => /削除|外れ/.test(m)), JSON.stringify(a.dialogs));
+  const saved = await a.evaluate(() => JSON.parse(localStorage.getItem("tabi-shiori-v1")).trips.find((t) => t.id === "Lother"));
+  assert.ok(!saved.items.some((i) => i.title === "書きかけ"));
+  assert.deepEqual(a.errors, []);
+});
+
+test("圏外で「みんなで編集する」を押すと（部品の読み込みが失敗しても）、日本語で知らせ、元の旅行は残る", async () => {
+  const c = await device(2, { trips: [localTrip("_test_圏外で同期")] });
+  // Safari の圏外と同じく、Firebase の部品（gstatic）の読み込みそのものを失敗させる
+  await c.setBypassServiceWorker(true);
+  await c.setRequestInterception(true);
+  c.on("request", (r) => (r.url().includes("gstatic.com/firebasejs") ? r.abort("internetdisconnected") : r.continue()));
+  await c.click("#syncTrip");
+  await waitFor(c, () => !document.querySelector("#syncTrip").disabled);
+  await new Promise((r) => setTimeout(r, 500));
+  const after = c.dialogs.slice(1); // 最初は「よろしいですか？」の確認
+  assert.equal(after.length, 1, JSON.stringify(c.dialogs));
+  assert.match(after[0], /インターネットにつながっていません|インターネットにつながっていない/);
+  assert.doesNotMatch(after[0], /[A-Za-z]{6,}/); // 英語のエラー文をそのまま出さない
+  assert.equal(await c.evaluate(() => trip() && trip().name), "_test_圏外で同期");
+  assert.equal(await c.evaluate(() => !!trip().cloud), false);
+});
+
+test("ドラッグ中にその日の別の予定が他の人に消されても、止まらずに並べ替えが終わる", async () => {
+  const t0 = localTrip("_test_ドラッグ中");
+  t0.items.push(D("2026-12-18", "15:00", "sight", "ひがし茶屋街"));
+  const a = await device(0, { trips: [t0] });
+  const { local, id } = await shareToGroup(a);
+  const b = await device(1, { url: local });
+  await waitFor(b, (id) => trip() && trip().id === id && trip().items.length === 3, id);
+  const items = (await cur(a)).items;
+  const moving = items.find((i) => i.title === "ひがし茶屋街").id;
+  const first = items.find((i) => i.title === "新幹線").id;
+  const victim = items.find((i) => i.title === "近江町市場").id;
+  const handle = await a.$(`li[data-item="${moving}"] [data-handle]`);
+  await handle.scrollIntoView();
+  const hb = await handle.boundingBox();
+  await a.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+  await a.mouse.down();
+  const target = await a.$(`li[data-item="${first}"]`);
+  for (let k = 0; k < 4; k++) { const tb = await target.boundingBox(); await a.mouse.move(tb.x + tb.width / 2, tb.y + 4, { steps: 3 }); }
+  await b.evaluate(({ id, victim }) => cloud.store.deleteEntry(id, "items", victim), { id, victim });
+  await waitFor(a, (victim) => !trip().items.some((i) => i.id === victim), victim);
+  await a.mouse.up();
+  await waitFor(a, () => !document.querySelector("li.placeholder"));
+  await waitFor(b, (moving) => { const it = trip().items.find((i) => i.id === moving); return it && it.time === "08:12"; }, moving);
+  assert.deepEqual(a.errors, []);
+});
+
+test("みんなで編集を使ったあとは、Firebase の部品がスマホに保存されている（次に圏外で開いても読み込める）", async () => {
+  const a = await device(0, { trips: [localTrip("_test_部品の保存")] });
+  await shareToGroup(a);
+  await waitFor(a, () => caches.open("tabi-shiori-fonts").then((c) => Promise.all(
+    ["firebase-app.js", "firebase-auth.js", "firebase-firestore.js"].map((f) => c.match("https://www.gstatic.com/firebasejs/11.10.0/" + f))))
+    .then((hits) => hits.every(Boolean)));
+});

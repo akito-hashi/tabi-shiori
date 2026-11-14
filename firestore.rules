@@ -16,6 +16,12 @@ service cloud.firestore {
         && request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.memberUids;
     }
 
+    // 書き込みのあとの状態で参加者か（旅行本体と中身を 1回のまとめ書き込みで作るときに使う）
+    function isMemberAfter(tripId) {
+      return signedIn()
+        && request.auth.uid in getAfter(/databases/$(database)/documents/trips/$(tripId)).data.memberUids;
+    }
+
     function autoId(id) {
       return id.matches('^[A-Za-z0-9]{20}$');
     }
@@ -59,7 +65,9 @@ service cloud.firestore {
       // 予定・行きたい場所・持ち物：参加者だけ。文書 ID は自動 ID 形式のみ
       match /{kind}/{docId} {
         allow read, delete: if (kind == 'items' || kind == 'wishes' || kind == 'packs') && isMemberOf(tripId);
-        allow create, update: if (kind == 'items' || kind == 'wishes' || kind == 'packs')
+        allow create: if (kind == 'items' || kind == 'wishes' || kind == 'packs')
+          && isMemberAfter(tripId) && autoId(docId);
+        allow update: if (kind == 'items' || kind == 'wishes' || kind == 'packs')
           && isMemberOf(tripId) && autoId(docId);
       }
     }

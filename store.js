@@ -4,6 +4,7 @@
 // データ：trips/{tripId}（name, dest, start, end, bookTheme, planStart, planEnd, memberUids[], createdAt）
 //         trips/{tripId}/items|wishes|packs/{docId}（1件 1文書）
 const BATCH_SIZE = 400;
+const MAX_ATOMIC = 499; // Firestore の 1回のまとめ書き込みは 500件まで
 const KINDS = ["items", "wishes", "packs"];
 
 function err(code, message) {
@@ -43,7 +44,10 @@ export function createStore(fb, firebaseConfig, opts = {}) {
 
   const tripRef = (id) => F.doc(db, "trips", id);
   const sub = (id, kind) => F.collection(db, "trips", id, kind);
-  const withId = (d) => ({ id: d.id, ...d.data() });
+  // 文書の中に id という項目があっても、本当の文書 ID を使う
+  const withId = (d) => ({ ...d.data(), id: d.id });
+  // 並び順：order（上げたときは元の順番、あとから足したものは作った時刻）→ 文書 ID
+  const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
   // onSnapshot は一度エラー（権限拒否など）になると止まる。作成・参加の直後はサーバーへの反映前で
   // 拒否されることがあるので、少し待ってやり直す（1, 2, 4, 8, 16 秒、計 5 回まで）。
@@ -103,32 +107,33 @@ export function createStore(fb, firebaseConfig, opts = {}) {
     };
     const unsubs = [
       listen(tripRef(id), (s) => { parts.trip = s.exists() ? s.data() : null; emit(); }, () => { parts.trip = null; emit(); }),
-      ...KINDS.map((k) => listen(sub(id, k), (s) => { parts[k] = s.docs.map(withId); emit(); })),
+      ...KINDS.map((k) => listen(sub(id, k), (s) => { parts[k] = s.docs.map(withId).sort(byOrder); emit(); })),
     ];
     return () => unsubs.forEach((u) => u());
   }
 
   // ---- スマホ保存の旅行をクラウドへ上げる（通信が必要。圏外なら何も作らずに code "offline"） ----
+  // 旅行本体と中身を 1回のまとめ書き込みで書く：全部書けるか、何も書かれないかのどちらか。
+  // 中身の欠けた旅行が残ったり、押し直して二重になったりしないように。
   async function createTripFromLocal(t) {
     await requireOnline();
     const id = newTripId();
     const head = { ...Object.fromEntries(TRIP_FIELDS.filter((k) => t[k] !== undefined).map((k) => [k, t[k]])),
       memberUids: [uid], createdAt: Date.now() };
-    await F.setDoc(tripRef(id), head);
     const writes = [];
-    for (const it of t.items || []) writes.push([F.doc(sub(id, "items")), clean(it)]);
-    for (const w of t.wishes || []) writes.push([F.doc(sub(id, "wishes")), clean(w)]);
+    (t.items || []).forEach((it, i) => writes.push([F.doc(sub(id, "items")), { ...clean(it), order: i }]));
+    (t.wishes || []).forEach((w, i) => writes.push([F.doc(sub(id, "wishes")), { ...clean(w), order: i }]));
     const packIds = {};
-    for (const p of t.packs || []) {
+    (t.packs || []).forEach((p, i) => {
       const ref = F.doc(sub(id, "packs"));
       packIds[p.id] = ref.id;
-      writes.push([ref, { name: p.name }]); // チェックは人ごとなので送らない
-    }
-    for (const part of chunk(writes, BATCH_SIZE)) {
-      const batch = F.writeBatch(db);
-      for (const [ref, data] of part) batch.set(ref, data);
-      await batch.commit();
-    }
+      writes.push([ref, { name: p.name, order: i }]); // チェックは人ごとなので送らない
+    });
+    if (writes.length + 1 > MAX_ATOMIC) throw err("too-large", "予定・行きたい場所・持ち物が多すぎるため、みんなで編集にできません（合わせて 498件まで）");
+    const batch = F.writeBatch(db);
+    batch.set(tripRef(id), head);
+    for (const [ref, data] of writes) batch.set(ref, data);
+    await batch.commit();
     return { id, packIds }; // packIds：元の持ち物 ID → クラウドの ID（チェックの引き継ぎ用）
   }
 
@@ -160,15 +165,23 @@ export function createStore(fb, firebaseConfig, opts = {}) {
     return "left";
   }
 
-  // 中身を先に消し、最後に旅行を消す（旅行が先に消えるとルール上、中身を消せなくなる）
+  // 旅行を中身ごと削除する（通信が必要。圏外なら何も消さずに code "offline"）。
+  // 中身と旅行本体を 1回のまとめ書き込みで消す（途中まで消えた旅行が残らないように）。
+  // 500件を超えるときだけ、中身を分けて消してから最後に旅行本体を消す。
   async function deleteTrip(id) {
-    for (const k of KINDS) {
-      const snap = await F.getDocs(sub(id, k));
-      for (const part of chunk(snap.docs, BATCH_SIZE)) {
-        const batch = F.writeBatch(db);
-        for (const d of part) batch.delete(d.ref);
-        await batch.commit();
-      }
+    await requireOnline();
+    const docs = [];
+    for (const k of KINDS) docs.push(...(await F.getDocsFromServer(sub(id, k))).docs);
+    if (docs.length + 1 <= MAX_ATOMIC) {
+      const batch = F.writeBatch(db);
+      for (const d of docs) batch.delete(d.ref);
+      batch.delete(tripRef(id));
+      return batch.commit();
+    }
+    for (const part of chunk(docs, BATCH_SIZE)) {
+      const batch = F.writeBatch(db);
+      for (const d of part) batch.delete(d.ref);
+      await batch.commit();
     }
     await F.deleteDoc(tripRef(id));
   }
@@ -179,7 +192,7 @@ export function createStore(fb, firebaseConfig, opts = {}) {
 
   async function addEntry(id, kind, data) {
     const ref = F.doc(sub(id, kind));
-    await F.setDoc(ref, clean(data));
+    await F.setDoc(ref, { order: Date.now(), ...clean(data) }); // あとから足したものは最後に並ぶ
     return ref.id;
   }
 
@@ -205,7 +218,7 @@ export function createStore(fb, firebaseConfig, opts = {}) {
     const keep = new Set(newItems.map((_, i) => autoDocId(i)));
     const old = await F.getDocs(F.query(sub(id, "items"), F.where("auto", "==", true)));
     const writes = [
-      ...newItems.map((it, i) => (b) => b.set(F.doc(sub(id, "items"), autoDocId(i)), { ...clean(it), auto: true })),
+      ...newItems.map((it, i) => (b) => b.set(F.doc(sub(id, "items"), autoDocId(i)), { ...clean(it), auto: true, order: i })),
       ...old.docs.filter((d) => !keep.has(d.id)).map((d) => (b) => b.delete(d.ref)),
     ];
     for (const part of chunk(writes, BATCH_SIZE)) {

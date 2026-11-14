@@ -333,8 +333,22 @@
   const CLOUD_FLAG = "tabi-shiori-uses-cloud";
   const INVITE_BASE = "https://akito-hashi.github.io/tabi-shiori/?openExternalBrowser=1#join=";
   const cloud = { store: null, connecting: null, watching: new Map(), listLoaded: false, failed: false };
+  const SDK_URLS = ["firebase-app.js", "firebase-auth.js", "firebase-firestore.js"].map((f) => "https://www.gstatic.com/firebasejs/11.10.0/" + f);
   const usesCloud = () => { try { return localStorage.getItem(CLOUD_FLAG) === "1"; } catch (e) { return false; } };
-  const ops = Ops.createOps({ save, uid, getStore: () => cloud.store, onError: (e) => alert("保存できませんでした：" + (e.message || e)) });
+  // Firebase などのエラーを、日本語の分かりやすい文にする
+  function friendlyError(e) {
+    const code = (e && e.code) || "";
+    const msg = String((e && e.message) || e || "");
+    if (code === "offline" || code === "unavailable" || code === "auth/network-request-failed"
+      || /fetch|network|import|Load failed/i.test(msg)) return "インターネットにつながっていません。つながってからもう一度試してください。";
+    if (code === "not-found") return "この予定・項目は、ほかの人に削除されたようです。";
+    if (code === "permission-denied") return "この旅行を編集できません（削除されたか、一覧から外れた可能性があります）。";
+    if (code === "too-large" || code === "full") return msg;
+    return "うまくいきませんでした（" + (code || "不明なエラー") + "）。時間をおいてもう一度試してください。";
+  }
+  const ops = Ops.createOps({ save, uid, getStore: () => cloud.store, onError: (e) => alert("保存できませんでした。" + friendlyError(e)) });
+  const tripById = (id) => state.trips.find((t) => t.id === id) || null;
+  let formTripId = null; // 旅行の編集・予定の入力を開いたときの旅行（途中で今の旅行が変わっても、別の旅行に書き込まないため）
   const trip = () => state.trips.find((t) => t.id === state.currentId) || null;
 
   let editingTrip = false;
@@ -419,6 +433,7 @@
   function openTripForm(edit) {
     editingTrip = true;
     const t = edit ? trip() : null;
+    formTripId = t ? t.id : null;
     $("tripFormTitle").textContent = t ? "旅行を編集" : "新しい旅行";
     $("tripSave").textContent = t ? "保存" : "作る";
     $("tName").value = t ? t.name : "";
@@ -442,7 +457,8 @@
     if (end < start) return err("帰る日は出発日より後にしてください");
     if (Shiori.tripDays(start, end).length > 60) return err("期間は60日までにしてください");
     if ($("tripForm").dataset.mode === "edit") {
-      const t = trip();
+      const t = tripById(formTripId);
+      if (!t) { editingTrip = false; render(); return alert("この旅行は削除されたか、一覧から外れたため、保存できませんでした。"); }
       const days = new Set(Shiori.tripDays(start, end));
       const outside = t.items.filter((it) => !days.has(it.date)).map((it) => it.id);
       if (outside.length && !confirm(`期間の外になる予定が ${outside.length} 件あります。削除して保存しますか？`)) return;
@@ -477,6 +493,7 @@
   // ---- 予定 ----
   function openItemForm(date, item) {
     editingItem = item ? item.id : null;
+    formTripId = trip().id;
     $("itemFormCard").hidden = false;
     $("itemFormTitle").textContent = item ? "予定を編集" : "予定を追加";
     $("itemSave").textContent = item ? "保存" : "追加";
@@ -519,15 +536,22 @@
     if (!title) return ($("itemError").textContent = "内容を入力してください");
     const data = { date: $("iDate").value, time: $("iTime").value, kind: $("iKind").value, title,
       place: $("iPlace").value.trim(), memo: $("iMemo").value.trim(), duration: Number($("iDur").value) || 60 };
-    if (editingItem) ops.updateItem(trip(), editingItem, data);
-    else ops.addItem(trip(), data);
+    const t = tripById(formTripId);
+    if (!t) { closeItemForm(); return alert("この旅行は削除されたか、一覧から外れたため、保存できませんでした。"); }
+    if (editingItem && !t.items.some((x) => x.id === editingItem)) {
+      closeItemForm();
+      return alert("この予定は、ほかの人に削除されたため保存できませんでした。");
+    }
+    if (editingItem) ops.updateItem(t, editingItem, data);
+    else ops.addItem(t, data);
     closeItemForm();
     render();
   });
   $("itemCancel").addEventListener("click", closeItemForm);
   $("itemDelete").addEventListener("click", () => {
     if (!editingItem || !confirm("この予定を削除しますか？")) return;
-    ops.deleteItems(trip(), [editingItem]);
+    const t = tripById(formTripId);
+    if (t && t.items.some((x) => x.id === editingItem)) ops.deleteItems(t, [editingItem]);
     closeItemForm();
     render();
   });
@@ -608,7 +632,7 @@
       days, dayStart: start, dayEnd: end, wishes,
       fixed: kept.filter((it) => it.time).map((it) => ({ date: it.date, time: it.time, kind: it.kind })),
     });
-    planDraft = { items, replaced: t.items.length - kept.length };
+    planDraft = { items, replaced: t.items.length - kept.length, tripId: t.id };
     const all = Shiori.sortItems([...kept.map((it) => ({ ...it, _kept: true })), ...items]);
     $("planDays").innerHTML = days.map((d, i) => {
       const list = all.filter((it) => it.date === d);
@@ -624,7 +648,13 @@
   });
   $("planApply").addEventListener("click", () => {
     if (!planDraft) return;
-    ops.replaceAutoItems(trip(), planDraft.items);
+    const t = tripById(planDraft.tripId);
+    if (!t || t.id !== state.currentId) {
+      planDraft = null;
+      $("planPreview").hidden = true;
+      return alert("下書きを作った旅行が見つからないため、追加できませんでした。もう一度作り直してください。");
+    }
+    ops.replaceAutoItems(t, planDraft.items);
     planDraft = null;
     $("planPreview").hidden = true;
     render();
@@ -649,7 +679,7 @@
     document.body.appendChild(ghost);
     li.classList.add("placeholder");
     document.body.classList.add("dragging");
-    drag = { li, ghost, dy: ev.clientY - r.top, before: dayOrder(), pointerId: ev.pointerId };
+    drag = { li, ghost, dy: ev.clientY - r.top, before: dayOrder(), pointerId: ev.pointerId, tripId: trip().id };
     try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
   });
 
@@ -677,24 +707,26 @@
 
   function endDrag(ev) {
     if (!drag || (ev && ev.pointerId !== drag.pointerId)) return;
-    const { ghost, before, li } = drag;
+    const { ghost, before, li, tripId } = drag;
     const movedId = li.dataset.item;
     drag = null;
     ghost.remove();
     document.body.classList.remove("dragging");
     const after = dayOrder();
-    const t = trip();
+    const t = tripById(tripId);
+    if (!t || t.id !== state.currentId) { pendingRender = false; return render(); } // 旅行ごと消えた・切り替わった
     const changed = Object.keys(after).filter((d) => (before[d] || []).join() !== after[d].join());
     const changes = [];
     for (const d of changed) {
       // 組み直しの開始時刻：並べ替えたあとにその日に並ぶ予定の、元の時刻のうち一番早いもの（なければ活動時間の始まり）
-      const ordered = after[d].map((id) => t.items.find((x) => x.id === id));
+      const ordered = after[d].map((id) => t.items.find((x) => x.id === id)).filter(Boolean); // ドラッグ中に消された予定は除く
       const start = Shiori.dayStartFor(ordered, t.planStart || "09:00");
       Shiori.retime(ordered, start, { moved: movedId }).forEach((n, k) => {
         if (ordered[k].date !== d || ordered[k].time !== n.time) changes.push({ id: ordered[k].id, date: d, time: n.time });
       });
     }
     ops.applyRetime(t, changes);
+    pendingRender = false;
     render();
   }
   document.addEventListener("pointerup", endDrag);
@@ -894,8 +926,20 @@
     if (!cloud.connecting) {
       cloud.connecting = (async () => {
         setSyncStatus("みんなで編集中の旅行を読み込んでいます…");
+        // 読み込みに失敗した部品は、ページを開いている間ずっと失敗のままになるので、先に届くか確かめる
+        try {
+          await Promise.all(SDK_URLS.map((u) => fetch(u).then((r) => { if (!r.ok) throw new Error(String(r.status)); })));
+        } catch (e) {
+          const x = new Error("offline"); x.code = "offline"; throw x;
+        }
         const mod = await import("./cloud.js");
         const store = await mod.getStore();
+        // 次に圏外で開いても読み込めるように、部品をスマホに保存しておく
+        if ("caches" in window) {
+          caches.open("tabi-shiori-fonts")
+            .then((c) => Promise.all(SDK_URLS.map((u) => c.match(u).then((hit) => hit || c.add(u)))))
+            .catch(() => {});
+        }
         cloud.store = store;
         cloud.failed = false;
         try { localStorage.setItem(CLOUD_FLAG, "1"); } catch (e) {}
@@ -938,8 +982,23 @@
     scheduleRender();
   }
 
+  const leavingByMe = new Set(); // 自分で削除・一覧から外した旅行（知らせない）
   function removeCloudTrip(id) {
     const had = state.trips.some((x) => x.id === id);
+    if (had && id === state.currentId) {
+      const name = (tripById(id) || {}).name || "";
+      const wasEditing = !$("itemFormCard").hidden || editingTrip || !!planDraft || !$("inviteCard").hidden;
+      closeItemForm();
+      editingTrip = false;
+      planDraft = null;
+      $("planPreview").hidden = true;
+      $("inviteCard").hidden = true;
+      if (typeof resetWishForm === "function") resetWishForm();
+      if (!leavingByMe.has(id)) {
+        setTimeout(() => alert(`「${name}」は、ほかの人に削除されたか、一覧から外れました。${wasEditing ? "入力中の内容は保存されていません。" : ""}`), 0);
+      }
+    }
+    leavingByMe.delete(id);
     state.trips = state.trips.filter((x) => x.id !== id);
     ops.forgetChecks(id);
     if (state.currentId === id) { state.currentId = state.trips[0] ? state.trips[0].id : null; save(); }
@@ -947,8 +1006,9 @@
   }
 
   cloud.deleteTrip = async (t) => {
+    leavingByMe.add(t.id);
     try { await (await connectCloud()).deleteTrip(t.id); }
-    catch (e) { alert("削除できませんでした：" + (e.code === "offline" ? "インターネットにつながっていません" : e.message)); }
+    catch (e) { leavingByMe.delete(t.id); alert("削除できませんでした。" + friendlyError(e)); }
   };
 
   // スマホ保存の旅行を、みんなで編集できるようにする（クラウドへ上げる）
@@ -968,9 +1028,7 @@
       render();
       showInvite(id);
     } catch (e) {
-      alert(e.code === "offline" || e.code === "auth/network-request-failed"
-        ? "インターネットにつながっていないため、できませんでした。つながってからもう一度押してください。"
-        : "できませんでした：" + e.message);
+      alert("みんなで編集できるようにできませんでした。" + friendlyError(e));
     } finally {
       $("syncTrip").disabled = false;
     }
@@ -1008,8 +1066,9 @@
       ? `この旅行に参加しているのはあなただけです。一覧から外すと「${t.name}」は削除され、元に戻せません。よろしいですか？`
       : `「${t.name}」をあなたの一覧から外します。ほかの人の一覧には残ります。招待リンクを開けば、また参加できます。よろしいですか？`;
     if (!confirm(msg)) return;
+    leavingByMe.add(t.id);
     try { await (await connectCloud()).leaveTrip(t.id); }
-    catch (e) { alert("できませんでした：" + (e.code === "offline" ? "インターネットにつながっていません" : e.message)); }
+    catch (e) { leavingByMe.delete(t.id); alert("できませんでした。" + friendlyError(e)); }
   });
 
   // 招待リンクで参加
@@ -1038,7 +1097,7 @@
       render();
     } catch (e) {
       $("joinCard").hidden = false;
-      $("joinError").textContent = JOIN_ERRORS[e.code] || "参加できませんでした：" + e.message;
+      $("joinError").textContent = JOIN_ERRORS[e.code] || "参加できませんでした。" + friendlyError(e);
     }
   }
   $("joinForm").addEventListener("submit", (ev) => { ev.preventDefault(); joinFromText($("joinInput").value); });

@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "test": "node --test tests/",
-    "test:firebase": "node --test --test-concurrency=1 tests-firebase/",
+    "test:firebase": "node --test --test-concurrency=1 --test-timeout=60000 tests-firebase/",
     "test:ui": "node --test --test-concurrency=1 --test-timeout=180000 tests-ui/",
     "check:rules": "node tools/rules-check.mjs"
   },

@@ -112,3 +112,59 @@ test("圏外で上げようとすると offline になり、何も作られな�
   const s = await F.getDocsFromServer(F.query(F.collection(db, "trips"), F.where("memberUids", "array-contains", a.uid)));
   assert.ok(!s.docs.some((d) => d.data().name === "_test_圏外"));
 });
+
+// ---- 見直しで見つかった問題の再現 ----
+
+test("上げた旅行の持ち物・行きたい場所は元の順に並び、あとから足したものは最後に来る", async () => {
+  const a = await newDevice();
+  const t0 = localTrip();
+  t0.packs = ["財布", "スマホ", "充電器", "着替え", "常備薬", "保険証", "ハンカチ", "折りたたみ傘", "カイロ", "手袋"].map((name, i) => ({ id: "p" + i, name, done: false }));
+  t0.wishes = ["兼六園", "金沢城", "21世紀美術館", "ひがし茶屋街", "近江町市場"].map((name, i) => ({ id: "w" + i, name, area: "x", duration: 60, kind: "sight", day: "" }));
+  const { id } = await a.createTripFromLocal(t0);
+  try {
+    await a.addEntry(id, "packs", { name: "モバイルバッテリー" });
+    const t = await watch(a, id, (t) => t.packs.length === 11);
+    assert.deepEqual(t.packs.map((p) => p.name), [...t0.packs.map((p) => p.name), "モバイルバッテリー"]);
+    assert.deepEqual(t.wishes.map((w) => w.name), t0.wishes.map((w) => w.name));
+  } finally { await a.deleteTrip(id); }
+});
+
+test("文書の中に id という項目が入っていても、本当の文書 ID が使われる", async () => {
+  const a = await newDevice();
+  const { id } = await a.createTripFromLocal(localTrip());
+  try {
+    const t0 = await watch(a, id, (t) => t.items.length === 1);
+    await F.updateDoc(F.doc(rawDbOf(a), "trips", id, "items", t0.items[0].id), { id: "fake" });
+    const t = await watch(a, id, (t) => t.items.length === 1 && "title" in t.items[0]);
+    assert.equal(t.items[0].id, t0.items[0].id);
+  } finally { await a.deleteTrip(id); }
+});
+
+test("圏外では旅行を削除できず offline になり、中身も消えない", async () => {
+  const a = await newDevice();
+  const { id } = await a.createTripFromLocal(localTrip());
+  const db = rawDbOf(a);
+  try {
+    await watch(a, id, (t) => t.items.length === 1);
+    await F.disableNetwork(db);
+    await rejectsWithCode(a.deleteTrip(id), "offline");
+    await F.enableNetwork(db);
+    const s = await F.getDocsFromServer(F.collection(db, "trips", id, "items"));
+    assert.equal(s.size, 1);
+  } finally { await F.enableNetwork(db); await a.deleteTrip(id); }
+});
+
+test("上げるときは旅行本体と中身を一度に書く（中身の欠けた旅行が一覧に出ない）", async () => {
+  const a = await newDevice();
+  const seen = [];
+  const stop = a.watchTrips((ts) => seen.push(...ts.filter((x) => x.name === "_test_一括").map((x) => x.id)));
+  const { id } = await a.createTripFromLocal({ ...localTrip(), name: "_test_一括" });
+  try {
+    // 一覧に出た瞬間に、中身（予定・行きたい場所・持ち物）がすべてそろっている
+    const t = await watch(a, id, () => true);
+    assert.equal(t.items.length, 1);
+    assert.equal(t.wishes.length, 1);
+    assert.equal(t.packs.length, 2);
+    assert.ok(seen.includes(id));
+  } finally { stop(); await a.deleteTrip(id); }
+});
