@@ -145,3 +145,42 @@ test("冊子の 4デザインで、はみ出し・載せ漏れがなく、PDF �
   }
   assert.deepEqual(p.errors, []);
 });
+
+test("行きたい場所の追加・編集・削除と、活動時間がスマホに保存される", async () => {
+  const p = await open(kanazawa());
+  await p.type("#wName", "兼六園");
+  await p.type("#wArea", "兼六園周辺");
+  await p.click("#wishSave");
+  await p.type("#wName", "金沢城");
+  await p.click("#wishSave");
+  let t = await saved(p);
+  assert.deepEqual(t.wishes.map((w) => [w.name, w.area]), [["兼六園", "兼六園周辺"], ["金沢城", "兼六園周辺"]]);
+  await p.click(`[data-wish="${t.wishes[0].id}"]`);
+  await p.select("#wDur", "120");
+  await p.click("#wishSave");
+  await p.click(`[data-wish="${t.wishes[1].id}"]`);
+  await p.click("#wishDelete");
+  await p.$eval("#pStart", (e) => { e.value = "10:00"; e.dispatchEvent(new Event("change")); });
+  t = await saved(p);
+  assert.deepEqual(t.wishes.map((w) => [w.name, w.duration]), [["兼六園", 120]]);
+  assert.equal(t.planStart, "10:00");
+  assert.deepEqual(p.errors, []);
+});
+
+test("持ち物の追加・ひな形・チェック・削除がスマホに保存される", async () => {
+  const p = await open(kanazawa());
+  await p.type("#packName", "手袋");
+  await p.click('#packForm button[type="submit"]');
+  await p.click("#tplDomestic");
+  let t = await saved(p);
+  assert.ok(t.packs.some((x) => x.name === "手袋"));
+  assert.equal(t.packs.filter((x) => x.name === "財布").length, 1); // ひな形で重ならない
+  const glove = t.packs.find((x) => x.name === "手袋");
+  await p.click(`[data-pack="${glove.id}"]`);
+  t = await saved(p);
+  assert.equal(t.packs.find((x) => x.id === glove.id).done, true);
+  await p.click(`[data-del-pack="${glove.id}"]`);
+  t = await saved(p);
+  assert.ok(!t.packs.some((x) => x.id === glove.id));
+  assert.deepEqual(p.errors, []);
+});

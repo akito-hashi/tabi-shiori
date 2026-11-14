@@ -270,6 +270,7 @@
 <script src="booklet.js"></script>
 <script src="share.js"></script>
 <script src="planner.js"></script>
+<script src="ops.js"></script>
 <script>
   const KEY = "tabi-shiori-v1";
   const KINDS = { sight: "📍", food: "🍽", move: "🚃", stay: "🏨", other: "📝" };
@@ -287,11 +288,16 @@
 
   let state = { trips: [], currentId: null };
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.trips)) state = s; } catch (e) {}
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+  // スマホに保存するのはスマホ保存の旅行だけ（みんなで編集中の旅行は Firebase が持つ）
+  const save = () => {
+    try { localStorage.setItem(KEY, JSON.stringify({ trips: state.trips.filter((t) => !t.cloud), currentId: state.currentId })); } catch (e) {}
+  };
+  const cloud = { store: null }; // みんなで編集（同期）の部分。準備ができたら store が入る
+  const ops = Ops.createOps({ save, uid, getStore: () => cloud.store, onError: (e) => alert("保存できませんでした：" + (e.message || e)) });
   const trip = () => state.trips.find((t) => t.id === state.currentId) || null;
 
   let editingTrip = false;
-  let editingItem = null;
+  let editingItem = null; // 編集中の予定の ID
 
   // ---- 描画 ----
   function render() {
@@ -348,10 +354,10 @@
     renderWishes(t, days);
 
     const packs = t.packs || [];
-    const done = packs.filter((x) => x.done).length;
+    const done = packs.filter((x) => ops.isChecked(t, x)).length;
     $("packCount").textContent = packs.length ? `${done} / ${packs.length}` : "";
     $("packs").innerHTML = packs.map((x) =>
-      `<li class="${x.done ? "done" : ""}"><input type="checkbox" data-pack="${esc(x.id)}" ${x.done ? "checked" : ""}>
+      `<li class="${ops.isChecked(t, x) ? "done" : ""}"><input type="checkbox" data-pack="${esc(x.id)}" ${ops.isChecked(t, x) ? "checked" : ""}>
         <span>${esc(x.name)}</span><button class="text" type="button" data-del-pack="${esc(x.id)}">×</button></li>`).join("")
       || '<li class="muted">まだありません</li>';
   }
@@ -385,17 +391,19 @@
     if ($("tripForm").dataset.mode === "edit") {
       const t = trip();
       const days = new Set(Shiori.tripDays(start, end));
-      const outside = t.items.filter((it) => !days.has(it.date)).length;
-      if (outside && !confirm(`期間の外になる予定が ${outside} 件あります。削除して保存しますか？`)) return;
-      Object.assign(t, { name, dest, start, end, items: t.items.filter((it) => days.has(it.date)) });
-      for (const w of t.wishes || []) if (w.day && !days.has(w.day)) w.day = "";
+      const outside = t.items.filter((it) => !days.has(it.date)).map((it) => it.id);
+      if (outside.length && !confirm(`期間の外になる予定が ${outside.length} 件あります。削除して保存しますか？`)) return;
+      ops.deleteItems(t, outside);
+      for (const w of t.wishes || []) if (w.day && !days.has(w.day)) ops.updateWish(t, w.id, { day: "" });
+      ops.updateTrip(t, { name, dest, start, end });
     } else {
       const t = { id: uid(), name, dest, start, end, items: [], packs: [] };
       state.trips.push(t);
       state.currentId = t.id;
+      save();
     }
     editingTrip = false;
-    save(); render();
+    render();
   });
 
   $("tripCancel").addEventListener("click", () => { editingTrip = false; render(); });
@@ -404,16 +412,18 @@
   $("tripSelect").addEventListener("change", (e) => { state.currentId = e.target.value; closeItemForm(); save(); render(); });
   $("deleteTrip").addEventListener("click", () => {
     const t = trip();
-    if (!confirm(`「${t.name}」を削除します。予定 ${t.items.length} 件・持ち物 ${(t.packs || []).length} 件も消え、元に戻せません。よろしいですか？`)) return;
+    const who = t.cloud ? "参加している全員の画面から消え、" : "";
+    if (!confirm(`「${t.name}」を削除します。予定 ${t.items.length} 件・持ち物 ${(t.packs || []).length} 件も${who}元に戻せません。よろしいですか？`)) return;
+    closeItemForm();
+    if (t.cloud) return cloud.deleteTrip(t);
     state.trips = state.trips.filter((x) => x.id !== t.id);
     state.currentId = state.trips[0] ? state.trips[0].id : null;
-    closeItemForm();
     save(); render();
   });
 
   // ---- 予定 ----
   function openItemForm(date, item) {
-    editingItem = item || null;
+    editingItem = item ? item.id : null;
     $("itemFormCard").hidden = false;
     $("itemFormTitle").textContent = item ? "予定を編集" : "予定を追加";
     $("itemSave").textContent = item ? "保存" : "追加";
@@ -446,18 +456,17 @@
     if (!title) return ($("itemError").textContent = "内容を入力してください");
     const data = { date: $("iDate").value, time: $("iTime").value, kind: $("iKind").value, title,
       place: $("iPlace").value.trim(), memo: $("iMemo").value.trim(), duration: Number($("iDur").value) || 60 };
-    if (editingItem) Object.assign(editingItem, data);
-    else trip().items.push({ id: uid(), ...data });
+    if (editingItem) ops.updateItem(trip(), editingItem, data);
+    else ops.addItem(trip(), data);
     closeItemForm();
-    save(); render();
+    render();
   });
   $("itemCancel").addEventListener("click", closeItemForm);
   $("itemDelete").addEventListener("click", () => {
     if (!editingItem || !confirm("この予定を削除しますか？")) return;
-    const t = trip();
-    t.items = t.items.filter((x) => x !== editingItem);
+    ops.deleteItems(trip(), [editingItem]);
     closeItemForm();
-    save(); render();
+    render();
   });
 
   // ---- 行きたい場所 ----
@@ -493,21 +502,19 @@
     const name = $("wName").value.trim();
     if (!name) return ($("wishError").textContent = "場所の名前を入力してください");
     const data = { name, area: $("wArea").value.trim(), duration: Number($("wDur").value), kind: $("wKind").value, day: $("wDay").value };
-    const t = trip();
-    t.wishes = t.wishes || [];
-    if (editingWish) Object.assign(editingWish, data);
-    else t.wishes.push({ id: uid(), ...data });
+    if (editingWish) ops.updateWish(trip(), editingWish, data);
+    else ops.addWish(trip(), data);
     const area = data.area;
     resetWishForm();
     $("wArea").value = area; // 同じエリアを続けて入れやすいように残す
-    save(); render();
+    render();
     $("wName").focus();
   });
   $("wishes").addEventListener("click", (ev) => {
     const li = ev.target.closest("[data-wish]");
     if (!li) return;
     const w = trip().wishes.find((x) => x.id === li.dataset.wish);
-    editingWish = w;
+    editingWish = w.id;
     $("wName").value = w.name; $("wArea").value = w.area; $("wDur").value = String(w.duration); $("wKind").value = w.kind; $("wDay").value = w.day || "";
     $("wishSave").textContent = "保存"; $("wishCancel").hidden = false; $("wishDelete").hidden = false;
     $("wName").focus();
@@ -515,17 +522,13 @@
   $("wishCancel").addEventListener("click", resetWishForm);
   $("wishDelete").addEventListener("click", () => {
     if (!editingWish) return;
-    const t = trip();
-    t.wishes = t.wishes.filter((w) => w !== editingWish);
+    ops.deleteWish(trip(), editingWish);
     resetWishForm();
-    save(); render();
+    render();
   });
   for (const id of ["pStart", "pEnd"]) {
     $(id).addEventListener("change", () => {
-      const t = trip();
-      t.planStart = $("pStart").value || "09:00";
-      t.planEnd = $("pEnd").value || "18:00";
-      save();
+      ops.updateTrip(trip(), { planStart: $("pStart").value || "09:00", planEnd: $("pEnd").value || "18:00" });
     });
   }
 
@@ -558,11 +561,10 @@
   });
   $("planApply").addEventListener("click", () => {
     if (!planDraft) return;
-    const t = trip();
-    t.items = [...t.items.filter((it) => !it.auto), ...planDraft.items.map((it) => ({ id: uid(), ...it }))];
+    ops.replaceAutoItems(trip(), planDraft.items);
     planDraft = null;
     $("planPreview").hidden = true;
-    save(); render();
+    render();
     $("days").scrollIntoView({ behavior: "smooth", block: "start" });
   });
   $("planCancel").addEventListener("click", () => { planDraft = null; $("planPreview").hidden = true; });
@@ -620,13 +622,16 @@
     const after = dayOrder();
     const t = trip();
     const changed = Object.keys(after).filter((d) => (before[d] || []).join() !== after[d].join());
+    const changes = [];
     for (const d of changed) {
       // 組み直しの開始時刻：並べ替えたあとにその日に並ぶ予定の、元の時刻のうち一番早いもの（なければ活動時間の始まり）
       const ordered = after[d].map((id) => t.items.find((x) => x.id === id));
       const start = Shiori.dayStartFor(ordered, t.planStart || "09:00");
-      Shiori.retime(ordered, start, { moved: movedId }).forEach((n, k) => Object.assign(ordered[k], { date: d, time: n.time }));
+      Shiori.retime(ordered, start, { moved: movedId }).forEach((n, k) => {
+        if (ordered[k].date !== d || ordered[k].time !== n.time) changes.push({ id: ordered[k].id, date: d, time: n.time });
+      });
     }
-    if (changed.length) save();
+    ops.applyRetime(t, changes);
     render();
   }
   document.addEventListener("pointerup", endDrag);
@@ -637,25 +642,20 @@
     ev.preventDefault();
     const name = $("packName").value.trim();
     if (!name) return;
-    const t = trip();
-    t.packs = t.packs || [];
-    t.packs.push({ id: uid(), name, done: false });
+    ops.addPacks(trip(), [name]);
     $("packName").value = "";
-    save(); render();
+    render();
   });
   $("packs").addEventListener("click", (ev) => {
     const t = trip();
     const cb = ev.target.closest("[data-pack]");
     const del = ev.target.closest("[data-del-pack]");
-    if (cb) { const x = t.packs.find((p) => p.id === cb.dataset.pack); x.done = cb.checked; save(); render(); }
-    if (del) { t.packs = t.packs.filter((p) => p.id !== del.dataset.delPack); save(); render(); }
+    if (cb) { ops.setCheck(t, cb.dataset.pack, cb.checked); render(); }
+    if (del) { ops.deletePack(t, del.dataset.delPack); render(); }
   });
   function addTemplate(kind) {
-    const t = trip();
-    t.packs = t.packs || [];
-    const have = new Set(t.packs.map((p) => p.name));
-    for (const name of TEMPLATES[kind]) if (!have.has(name)) t.packs.push({ id: uid(), name, done: false });
-    save(); render();
+    ops.addPacks(trip(), TEMPLATES[kind]);
+    render();
   }
   $("tplDomestic").addEventListener("click", () => addTemplate("domestic"));
   $("tplAbroad").addEventListener("click", () => addTemplate("abroad"));
@@ -693,7 +693,7 @@
     renderThemeButtons(theme);
     $("booklet").className = `bk theme-${theme}`;
     const tmp = document.createElement("div");
-    tmp.innerHTML = Booklet.build(t, theme);
+    tmp.innerHTML = Booklet.build(ops.withChecks(t), theme);
     $("bkPages").innerHTML = "";
     for (const page of [...tmp.children]) {
       const sheet = document.createElement("div");
@@ -730,8 +730,8 @@
   $("bkThemes").addEventListener("click", (ev) => {
     const b = ev.target.closest("[data-theme]");
     if (!b) return;
-    bookletTrip.bookTheme = b.dataset.theme;
-    if (!sharedView) save();
+    if (!sharedView) ops.updateTrip(bookletTrip, { bookTheme: b.dataset.theme });
+    bookletTrip.bookTheme = b.dataset.theme; // すぐ描き直すため（みんなで編集中の旅行はあとで同期の通知でも届く）
     $("booklet").dataset.ready = "";
     openBooklet(bookletTrip);
   });
@@ -769,7 +769,7 @@
   // スマホでは共有メニュー（LINE を選べる）、それ以外では LINE の送信画面を開く
   async function shareTrip(t) {
     let url;
-    try { url = await ShareLink.shareUrl(t); } catch (e) { return alert("共有リンクを作れませんでした：" + e.message); }
+    try { url = await ShareLink.shareUrl(ops.withChecks(t)); } catch (e) { return alert("共有リンクを作れませんでした：" + e.message); }
     if (url.length > 8000 && !confirm("予定やメモが多いため、リンクがとても長くなりました。送り先によっては届かないことがあります。このまま共有しますか？")) return;
     const text = `旅のしおり「${t.name}」（${t.start.replace(/-/g, "/")} から ${t.end.replace(/-/g, "/")}）`;
     if (navigator.share) {
