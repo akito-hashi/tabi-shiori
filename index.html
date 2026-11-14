@@ -100,6 +100,13 @@
   #planPreview li.new b { color: var(--accent); }
   .leftover { color: var(--danger); font-size: .9rem; }
 
+  /* みんなで編集 */
+  .sync-badge { display: inline-block; font-size: .75rem; font-weight: 700; background: var(--accent-ink); color: var(--accent);
+    border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 3px; }
+  .sync-status { margin: -6px 0 12px; font-size: .85rem; color: var(--muted); }
+  #inviteCard .row { align-items: center; }
+  #inviteCard input { font-size: .85rem; }
+
   ul.packs { list-style: none; padding: 0; margin: 0; }
   ul.packs li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
   ul.packs li:first-child { border-top: none; }
@@ -114,6 +121,18 @@
     <h1>旅のしおり</h1>
     <select id="tripSelect" aria-label="旅行" hidden></select>
   </header>
+  <p class="sync-status" id="syncStatus" hidden></p>
+
+  <!-- 招待リンクで参加 -->
+  <section class="card" id="joinCard" hidden>
+    <h2>招待リンクで参加</h2>
+    <p class="muted" style="margin:0 0 8px">届いた招待リンクを貼り付けると、その旅行をみんなで編集できます。</p>
+    <form id="joinForm" class="row">
+      <input id="joinInput" placeholder="招待リンクを貼り付け" autocomplete="off">
+      <button class="primary" type="submit" id="joinBtn" style="flex:0 0 auto">参加</button>
+    </form>
+    <p class="error" id="joinError"></p>
+  </section>
 
   <!-- 旅行の作成・編集 -->
   <section class="card" id="tripFormCard" hidden>
@@ -137,7 +156,7 @@
 
   <div id="tripView" hidden>
     <section class="card hero">
-      <div class="title" id="hTitle"></div>
+      <div class="title"><span id="hTitle"></span><span class="sync-badge" id="syncBadge" hidden>みんなで編集中</span></div>
       <div class="sub" id="hSub"></div>
       <div class="phase" id="hPhase"></div>
       <div class="tools">
@@ -146,7 +165,25 @@
         <button class="text" id="editTrip" type="button">旅行を編集</button>
         <button class="text" id="newTrip" type="button">新しい旅行</button>
         <button class="text" id="deleteTrip" type="button">削除</button>
+        <button class="text" id="syncTrip" type="button">みんなで編集する</button>
+        <button class="text" id="inviteTrip" type="button" hidden>招待リンク</button>
+        <button class="text" id="leaveTrip" type="button" hidden>一覧から外す</button>
+        <button class="text" id="joinOpen" type="button">招待リンクで参加</button>
       </div>
+    </section>
+
+    <section class="card" id="inviteCard" hidden>
+      <h2>招待リンク</h2>
+      <p class="muted" style="margin:0 0 8px">このリンクを LINE のグループなどに送ると、開いた人もこの旅行を見たり直したりできます。リンクを知っている人は誰でも参加できるので、送る相手に気をつけてください。スマホを替えたときも、このリンクを開けばこの旅行に戻れます。</p>
+      <div class="row">
+        <input id="inviteLink" readonly>
+      </div>
+      <div class="actions">
+        <button type="button" class="primary" id="sendInvite">LINE などで送る</button>
+        <button type="button" id="copyInvite">コピー</button>
+        <button type="button" id="closeInvite">閉じる</button>
+      </div>
+      <p class="muted" id="inviteMsg"></p>
     </section>
 
     <section class="card next" id="nextCard" hidden>
@@ -292,7 +329,11 @@
   const save = () => {
     try { localStorage.setItem(KEY, JSON.stringify({ trips: state.trips.filter((t) => !t.cloud), currentId: state.currentId })); } catch (e) {}
   };
-  const cloud = { store: null }; // みんなで編集（同期）の部分。準備ができたら store が入る
+  // みんなで編集（同期）の部分。準備ができたら store が入る
+  const CLOUD_FLAG = "tabi-shiori-uses-cloud";
+  const INVITE_BASE = "https://akito-hashi.github.io/tabi-shiori/?openExternalBrowser=1#join=";
+  const cloud = { store: null, connecting: null, watching: new Map(), listLoaded: false, failed: false };
+  const usesCloud = () => { try { return localStorage.getItem(CLOUD_FLAG) === "1"; } catch (e) { return false; } };
   const ops = Ops.createOps({ save, uid, getStore: () => cloud.store, onError: (e) => alert("保存できませんでした：" + (e.message || e)) });
   const trip = () => state.trips.find((t) => t.id === state.currentId) || null;
 
@@ -304,9 +345,16 @@
     const t = trip();
     const sel = $("tripSelect");
     sel.hidden = state.trips.length < 2;
-    sel.innerHTML = state.trips.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");
+    sel.innerHTML = state.trips.map((x) => `<option value="${esc(x.id)}">${x.cloud ? "👥 " : ""}${esc(x.name)}</option>`).join("");
     if (t) sel.value = t.id;
 
+    // みんなで編集中の旅行を読み込んでいる間は、新しい旅行の入力欄を出さない
+    if (!t && cloudPending()) {
+      $("tripFormCard").hidden = true;
+      $("tripView").hidden = true;
+      return;
+    }
+    if (!t) $("joinCard").hidden = false;
     $("tripFormCard").hidden = !(editingTrip || !t);
     $("tripCancel").hidden = !t;
     $("tripView").hidden = !t;
@@ -314,6 +362,11 @@
 
     const now = new Date();
     $("hTitle").textContent = t.name;
+    $("syncBadge").hidden = !t.cloud;
+    $("syncTrip").hidden = !!t.cloud;
+    $("inviteTrip").hidden = !t.cloud;
+    $("leaveTrip").hidden = !t.cloud;
+    if (!t.cloud) $("inviteCard").hidden = true;
     $("hSub").textContent = `${t.dest ? t.dest + " ・ " : ""}${md(t.start)} 〜 ${md(t.end)}`;
     const p = Shiori.tripPhase(t.start, t.end, now);
     $("hPhase").textContent = p.phase === "before" ? (p.daysLeft === 1 ? "明日出発！" : `出発まであと ${p.daysLeft} 日`)
@@ -406,7 +459,7 @@
     render();
   });
 
-  $("tripCancel").addEventListener("click", () => { editingTrip = false; render(); });
+  $("tripCancel").addEventListener("click", () => { editingTrip = false; pendingRender = false; render(); });
   $("editTrip").addEventListener("click", () => openTripForm(true));
   $("newTrip").addEventListener("click", () => openTripForm(false));
   $("tripSelect").addEventListener("change", (e) => { state.currentId = e.target.value; closeItemForm(); save(); render(); });
@@ -439,7 +492,17 @@
     $("itemFormCard").scrollIntoView({ behavior: "smooth", block: "start" });
     setTimeout(() => $("iTitle").focus(), 300);
   }
-  function closeItemForm() { editingItem = null; $("itemFormCard").hidden = true; }
+  function closeItemForm() { editingItem = null; $("itemFormCard").hidden = true; flushRender(); }
+
+  // 他の人の変更が届いたときの描き直し。入力欄を開いている間やドラッグ中は、終わるまで待つ
+  let pendingRender = false;
+  function scheduleRender() {
+    if ((typeof drag !== "undefined" && drag) || !$("itemFormCard").hidden || editingTrip) { pendingRender = true; return; }
+    render();
+  }
+  function flushRender() {
+    if (pendingRender) { pendingRender = false; render(); }
+  }
 
   $("days").addEventListener("click", (ev) => {
     if (ev.target.closest("a")) return; // 地図リンクはそのまま開く
@@ -814,10 +877,188 @@
   }
 
   // 旅行中は1分ごとに「次の予定」を更新
-  setInterval(() => { if (trip() && !editingItem && !editingTrip && !drag) render(); }, 60000);
+  setInterval(() => { if (trip()) scheduleRender(); }, 60000);
+  // ---- みんなで編集（同期） ----
+  function setSyncStatus(msg) {
+    $("syncStatus").textContent = msg;
+    $("syncStatus").hidden = !msg;
+  }
+  // 選んでいる旅行がまだ届いていない（みんなで編集中の旅行を読み込み中）
+  function cloudPending() {
+    return !!state.currentId && !trip() && usesCloud() && !cloud.failed
+      && (!cloud.listLoaded || cloud.watching.has(state.currentId));
+  }
+
+  async function connectCloud() {
+    if (cloud.store) return cloud.store;
+    if (!cloud.connecting) {
+      cloud.connecting = (async () => {
+        setSyncStatus("みんなで編集中の旅行を読み込んでいます…");
+        const mod = await import("./cloud.js");
+        const store = await mod.getStore();
+        cloud.store = store;
+        cloud.failed = false;
+        try { localStorage.setItem(CLOUD_FLAG, "1"); } catch (e) {}
+        store.watchTrips(onCloudList);
+        return store;
+      })().catch((e) => {
+        cloud.connecting = null;
+        cloud.failed = true;
+        setSyncStatus(usesCloud() ? "みんなで編集中の旅行を読み込めませんでした。インターネットにつながってから開き直してください。" : "");
+        render();
+        throw e;
+      });
+    }
+    return cloud.connecting;
+  }
+
+  function onCloudList(list) {
+    const ids = new Set(list.map((x) => x.id));
+    for (const id of ids) {
+      if (!cloud.watching.has(id)) cloud.watching.set(id, cloud.store.watchTrip(id, (t) => onCloudTrip(id, t)));
+    }
+    for (const [id, unsub] of cloud.watching) {
+      if (!ids.has(id)) { unsub(); cloud.watching.delete(id); removeCloudTrip(id); }
+    }
+    cloud.listLoaded = true;
+    setSyncStatus("");
+    if (state.currentId && !trip() && !ids.has(state.currentId)) { // 選んでいた旅行がもうない
+      state.currentId = state.trips[0] ? state.trips[0].id : null;
+      save();
+    }
+    scheduleRender();
+  }
+
+  function onCloudTrip(id, t) {
+    if (!t) return removeCloudTrip(id);
+    const i = state.trips.findIndex((x) => x.id === id);
+    if (i >= 0) state.trips[i] = t; else state.trips.push(t);
+    if (!state.currentId) { state.currentId = id; save(); }
+    if (bookletTrip && bookletTrip.id === id && !$("booklet").hidden) bookletTrip = t;
+    scheduleRender();
+  }
+
+  function removeCloudTrip(id) {
+    const had = state.trips.some((x) => x.id === id);
+    state.trips = state.trips.filter((x) => x.id !== id);
+    ops.forgetChecks(id);
+    if (state.currentId === id) { state.currentId = state.trips[0] ? state.trips[0].id : null; save(); }
+    if (had) scheduleRender();
+  }
+
+  cloud.deleteTrip = async (t) => {
+    try { await (await connectCloud()).deleteTrip(t.id); }
+    catch (e) { alert("削除できませんでした：" + (e.code === "offline" ? "インターネットにつながっていません" : e.message)); }
+  };
+
+  // スマホ保存の旅行を、みんなで編集できるようにする（クラウドへ上げる）
+  $("syncTrip").addEventListener("click", async () => {
+    const t = trip();
+    if (!t || t.cloud) return;
+    if (!confirm(`「${t.name}」をみんなで編集できるようにします。\n旅行の内容がインターネット上（Firebase）に保存され、招待リンクを知っている人は誰でも見たり直したりできます。\nよろしいですか？`)) return;
+    $("syncTrip").disabled = true;
+    try {
+      const store = await connectCloud();
+      const { id, packIds } = await store.createTripFromLocal(t);
+      try { localStorage.setItem("tabi-shiori-backup-" + id, JSON.stringify(t)); } catch (e) {} // 念のため元データを残す
+      ops.adoptChecks(id, Object.fromEntries((t.packs || []).filter((p) => p.done).map((p) => [packIds[p.id], true])));
+      state.trips = state.trips.filter((x) => x.id !== t.id);
+      state.currentId = id;
+      save();
+      render();
+      showInvite(id);
+    } catch (e) {
+      alert(e.code === "offline" || e.code === "auth/network-request-failed"
+        ? "インターネットにつながっていないため、できませんでした。つながってからもう一度押してください。"
+        : "できませんでした：" + e.message);
+    } finally {
+      $("syncTrip").disabled = false;
+    }
+  });
+
+  function showInvite(id) {
+    $("inviteLink").value = INVITE_BASE + id;
+    $("inviteMsg").textContent = "";
+    $("inviteCard").hidden = false;
+    $("inviteCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  $("inviteTrip").addEventListener("click", () => showInvite(trip().id));
+  $("closeInvite").addEventListener("click", () => { $("inviteCard").hidden = true; });
+  $("copyInvite").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("inviteLink").value); $("inviteMsg").textContent = "コピーしました"; }
+    catch (e) { $("inviteLink").select(); $("inviteMsg").textContent = "選択した状態です。長押しでコピーしてください"; }
+  });
+  $("sendInvite").addEventListener("click", async () => {
+    const t = trip();
+    const url = $("inviteLink").value;
+    const text = `旅のしおり「${t.name}」をみんなで編集しよう`;
+    if (navigator.share) {
+      try { await navigator.share({ title: `旅のしおり ${t.name}`, text, url }); }
+      catch (e) { if (e.name !== "AbortError") alert("送れませんでした：" + e.message); }
+      return;
+    }
+    window.open("https://line.me/R/share?text=" + encodeURIComponent(text + "\n" + url), "_blank", "noopener");
+  });
+
+  // 一覧から外す（最後の 1人なら旅行ごと削除）
+  $("leaveTrip").addEventListener("click", async () => {
+    const t = trip();
+    const last = (t.memberUids || []).length <= 1;
+    const msg = last
+      ? `この旅行に参加しているのはあなただけです。一覧から外すと「${t.name}」は削除され、元に戻せません。よろしいですか？`
+      : `「${t.name}」をあなたの一覧から外します。ほかの人の一覧には残ります。招待リンクを開けば、また参加できます。よろしいですか？`;
+    if (!confirm(msg)) return;
+    try { await (await connectCloud()).leaveTrip(t.id); }
+    catch (e) { alert("できませんでした：" + (e.code === "offline" ? "インターネットにつながっていません" : e.message)); }
+  });
+
+  // 招待リンクで参加
+  const JOIN_ERRORS = {
+    "not-found": "旅行が見つかりません。削除されたか、リンクが間違っている可能性があります",
+    offline: "参加するにはインターネット接続が必要です",
+    "auth/network-request-failed": "参加するにはインターネット接続が必要です",
+    full: "この旅行は参加できる人数の上限に達しています",
+  };
+  async function joinFromText(text) {
+    $("joinError").textContent = "";
+    const s = String(text || "").trim();
+    const m = s.match(/#join=([A-Za-z0-9_-]{22})(?![A-Za-z0-9_-])/) || s.match(/^([A-Za-z0-9_-]{22})$/);
+    if (!m) {
+      $("joinCard").hidden = false;
+      $("joinError").textContent = "招待リンクの形式が正しくありません。届いたリンクをそのまま貼り付けてください";
+      return;
+    }
+    try {
+      const store = await connectCloud();
+      await store.joinTrip(m[1]);
+      state.currentId = m[1];
+      save();
+      $("joinInput").value = "";
+      $("joinCard").hidden = true;
+      render();
+    } catch (e) {
+      $("joinCard").hidden = false;
+      $("joinError").textContent = JOIN_ERRORS[e.code] || "参加できませんでした：" + e.message;
+    }
+  }
+  $("joinForm").addEventListener("submit", (ev) => { ev.preventDefault(); joinFromText($("joinInput").value); });
+  $("joinOpen").addEventListener("click", () => {
+    $("joinCard").hidden = !$("joinCard").hidden;
+    if (!$("joinCard").hidden) { $("joinError").textContent = ""; $("joinInput").focus(); }
+  });
+  function joinFromHash() {
+    if (!/#join=/.test(location.hash)) return;
+    const h = location.hash;
+    history.replaceState(null, "", location.pathname + location.search);
+    joinFromText(h);
+  }
+  window.addEventListener("hashchange", () => { joinFromHash(); });
+
   if (!state.currentId && state.trips[0]) state.currentId = state.trips[0].id;
+  if (usesCloud()) connectCloud().catch(() => {});
   render();
   openSharedFromHash();
+  joinFromHash();
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     navigator.serviceWorker.register("sw.js").catch(() => {});
