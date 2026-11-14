@@ -9,7 +9,8 @@ import puppeteer from "puppeteer-core";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = 8700 + Math.floor(Math.random() * 90);
-const BASE = `http://localhost:${PORT}/`;
+// APP_BASE を付けると、公開先（例：https://akito-hashi.github.io/tabi-shiori/）に対して動かす
+const BASE = process.env.APP_BASE || `http://localhost:${PORT}/`;
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 let server, browser;
@@ -17,8 +18,10 @@ const ctx = [];
 const pages = [];
 
 before(async () => {
-  server = spawn("python3", ["-m", "http.server", String(PORT)], { cwd: ROOT, stdio: "ignore" });
-  await new Promise((r) => setTimeout(r, 800));
+  if (!process.env.APP_BASE) {
+    server = spawn("python3", ["-m", "http.server", String(PORT)], { cwd: ROOT, stdio: "ignore" });
+    await new Promise((r) => setTimeout(r, 800));
+  }
   browser = await puppeteer.launch({ executablePath: CHROME, headless: true });
 });
 afterEach(async () => {
