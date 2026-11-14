@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="旅のしおり">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>旅のしおり</title>
 <meta name="theme-color" content="#1f6f8b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -605,7 +611,8 @@
 
   function endDrag(ev) {
     if (!drag || (ev && ev.pointerId !== drag.pointerId)) return;
-    const { ghost, before } = drag;
+    const { ghost, before, li } = drag;
+    const movedId = li.dataset.item;
     drag = null;
     ghost.remove();
     document.body.classList.remove("dragging");
@@ -613,11 +620,10 @@
     const t = trip();
     const changed = Object.keys(after).filter((d) => (before[d] || []).join() !== after[d].join());
     for (const d of changed) {
-      // 組み直しの開始時刻：その日にもともとあった予定の一番早い時刻（なければ活動時間の始まり）
-      const firstTimes = (before[d] || []).map((id) => t.items.find((x) => x.id === id)).filter((x) => x && x.time).map((x) => x.time).sort();
-      const start = firstTimes[0] || t.planStart || "09:00";
+      // 組み直しの開始時刻：並べ替えたあとにその日に並ぶ予定の、元の時刻のうち一番早いもの（なければ活動時間の始まり）
       const ordered = after[d].map((id) => t.items.find((x) => x.id === id));
-      Shiori.retime(ordered, start).forEach((n, k) => Object.assign(ordered[k], { date: d, time: n.time }));
+      const start = Shiori.dayStartFor(ordered, t.planStart || "09:00");
+      Shiori.retime(ordered, start, { moved: movedId }).forEach((n, k) => Object.assign(ordered[k], { date: d, time: n.time }));
     }
     if (changed.length) save();
     render();
@@ -795,6 +801,10 @@
   if (!state.currentId && state.trips[0]) state.currentId = state.trips[0].id;
   render();
   openSharedFromHash();
+
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
 </script>
 </body>
 </html>

@@ -44,3 +44,17 @@ test("移動・宿・食事は元の時刻より早くならない（押され�
   const pushed = S.retime([K("a", "09:00", 240, "sight"), K("train", "10:00", 60, "move")], "09:00");
   assert.deepEqual(times(pushed), [["a", "09:00"], ["train", "13:15"]]);
 });
+
+test("ドラッグした予定は、移動・宿・食事でも置いた位置の時刻になる", () => {
+  const K = (id, time, duration, kind) => ({ id, time, duration, kind });
+  const day = [K("dinner", "18:00", 90, "food"), K("train", "08:12", 60, "move"), K("higashi", "09:12", 90, "sight")];
+  const out = S.retime(day, "08:12", { moved: "dinner" });
+  assert.deepEqual(times(out), [["dinner", "08:12"], ["train", "09:57"], ["higashi", "11:12"]]);
+});
+
+test("開始時刻：並べ替えたあとの予定の元の時刻のうち一番早いもの（なければ指定の時刻）", () => {
+  const K = (id, time) => ({ id, time });
+  assert.equal(S.dayStartFor([K("a", "12:00"), K("b", "09:12"), K("c", "")], "09:00"), "09:12");
+  assert.equal(S.dayStartFor([K("c", "")], "09:00"), "09:00");
+  assert.equal(S.dayStartFor([], "10:00"), "10:00");
+});

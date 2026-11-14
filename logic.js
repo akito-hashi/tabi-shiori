@@ -38,8 +38,9 @@
   // 並べ替えた順に時刻を振り直す。先頭に続く「終日」の予定は終日のまま。
   // 所要時間がなければ 60分、移動の目安は同じエリア 15分・違うエリア 30分（エリア不明なら 15分）。
   // 移動・宿・食事は時刻が決まっていることが多いので、元の時刻より早めない（押されたときだけ後ろへ）。
+  // ただし、ドラッグした予定（opts.moved の id）は置いた位置の時刻にする。
   const ANCHORED = new Set(["move", "stay", "food"]);
-  function retime(items, start) {
+  function retime(items, start, opts = {}) {
     const toMin = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
     const toHM = (m) => (m >= 24 * 60 ? "23:59" : `${pad(Math.floor(m / 60))}:${pad(m % 60)}`);
     let cursor = toMin(start);
@@ -49,13 +50,19 @@
       if (leading && !it.time) return { ...it };
       leading = false;
       if (prev) cursor += (prev.duration || 60) + (prev.area && it.area && prev.area !== it.area ? 30 : 15);
-      if (ANCHORED.has(it.kind) && it.time) cursor = Math.max(cursor, toMin(it.time));
+      if (ANCHORED.has(it.kind) && it.time && it.id !== opts.moved) cursor = Math.max(cursor, toMin(it.time));
       prev = it;
       return { ...it, time: toHM(cursor) };
     });
   }
 
-  const api = { tripDays, sortItems, nextItem, tripPhase, toISO, retime };
+  // 組み直しの開始時刻：並べ替えたあとにその日に並ぶ予定の、元の時刻のうち一番早いもの（なければ fallback）
+  function dayStartFor(items, fallback) {
+    const ts = items.map((it) => it.time).filter(Boolean).sort();
+    return ts[0] || fallback;
+  }
+
+  const api = { tripDays, sortItems, nextItem, tripPhase, toISO, retime, dayStartFor };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Shiori = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
